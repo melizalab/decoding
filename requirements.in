@@ -1,0 +1,4 @@
+parse
+git+https://github.com/detly/gammatone.git
+scipy
+numpy
