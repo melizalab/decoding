@@ -1,4 +1,1 @@
-parse
-git+https://github.com/detly/gammatone.git
-scipy
-numpy
+git+https://github.com/detly/gammatone.git#egg=Gammatone

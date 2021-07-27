@@ -1,7 +1,7 @@
 """Loading data for neural decoding
 """
 from itertools import chain
-from . import data_io as io
+from . import io
 import numpy as np
 from gammatone.gtgram import gtgram
 
