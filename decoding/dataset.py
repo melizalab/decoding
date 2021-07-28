@@ -6,37 +6,55 @@ import numpy as np
 from gammatone.gtgram import gtgram
 
 class Dataset():
-    def __init__(self, time_step=0.005):
+    def __init__(self, pprox_path_format, wav_path_format,
+            time_step=0.005, frequency_bin_count=100,
+            min_frequency=200, prediction_window=(5, 15),
+            select_clusters=None):
+        """
+            pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
+            wav_path_format: e.g. 'wav/{}.wav'
+        """
         self.time_step = time_step
-        self.frequency_bin_count = 100
-        self.min_frequency = 200
-        self.lookahead = (5, 15)
-        self._build_dataset()
+        self.frequency_bin_count = frequency_bin_count
+        self.min_frequency = min_frequency
+        self.lookahead = prediction_window
+        self._build_dataset(
+                pprox_path_format,
+                wav_path_format,
+                select_clusters
+        )
 
-    def _build_dataset(self):
-        clusters = io.load_pprox('../pprox/P120_1_1_{}.pprox')
-        auditory_neurons = set(['c244','c314','c329','c362','c89','c92'])
-        clusters = dict(filter(lambda x: x[0] in auditory_neurons, clusters.items()))
-
+    def _get_clusters(self, pprox_path, select_clusters):
+        clusters = io.load_pprox(pprox_path, select_clusters)
         assert len(clusters) > 0, "no clusters"
+        self.stimulus_from_trial = dict(chain.from_iterable([
+            [(trial['index'], trial['stim']) for trial in n['pprox']
+        ] for n in clusters.values()]))
+        self.stim_on_from_trial = dict(chain.from_iterable([
+            [(trial['index'], trial['stim_on']) for trial in n['pprox']
+        ] for n in clusters.values()]))
+        self.trial_list = self.stimulus_from_trial.keys()
+        return clusters
 
-        stimuli_names = self.get_stimuli_names(clusters)
-        stimuli = io.load_stimuli('../wav/{}.wav', stimuli_names)
+    def _build_dataset(self, pprox_path, wav_path, select_clusters):
+        clusters = self._get_clusters(pprox_path, select_clusters)
+        stimuli_names = self._get_stimuli_names(clusters)
+        stimuli = io.load_stimuli(wav_path, stimuli_names)
 
-        spectrograms = self.get_spectrograms(stimuli)
+        spectrograms = self._get_spectrograms(stimuli)
 
-        binned_spikes_by_trial = self.get_binned_spikes(clusters)
+        binned_spikes_by_trial = self._get_binned_spikes(clusters)
 
-        neural_data, stimuli_data = self.get_data(clusters, binned_spikes_by_trial, spectrograms)
+        neural_data, stimuli_data = self._get_data(clusters, binned_spikes_by_trial, spectrograms)
         self.neural_data = neural_data
         self.stimuli_data = stimuli_data
 
     @staticmethod
-    def get_stimuli_names(clusters):
+    def _get_stimuli_names(clusters):
         """Returns list of all stimuli referred to in pprox data"""
         return np.unique([[trial['stim'] for trial in n['pprox']] for n in clusters.values()])
 
-    def get_spectrograms(self, stimuli):
+    def _get_spectrograms(self, stimuli):
         """Returns dictionary of gammatone spectrograms for each stimulus"""
         spectrograms = {}
         for name, (sample_rate, samples) in stimuli.items():
@@ -51,36 +69,34 @@ class Dataset():
             spectrograms[name] = gammatone_gram
         return spectrograms
 
-    def get_binned_spikes(self, clusters):
+    def _get_binned_spikes(self, clusters):
         n_neurons = len(clusters)
         binned_spikes_by_trial = {}
         for n, neuron in enumerate(clusters.values()):
             sampling_rate = neuron['entry_metadata'][0]['sampling_rate']
             for trial in neuron['pprox']:
-                spike_duration = (trial['recording']['stop'] - trial['recording']['start']) \
-                        / sampling_rate
-                bin_count = int(spike_duration / self.time_step)
-                spikes, _ = np.histogram(trial['events'], bins=bin_count)
+                bin_count = self._get_bin_count(trial, sampling_rate)
+                spikes, _ = np.histogram( trial['events'], bins=bin_count)
 
-                bt = binned_spikes_by_trial.get(trial['index'], np.zeros((bin_count, n_neurons)))
-                bt[:, n] = spikes
-                binned_spikes_by_trial[trial['index']] = bt
+                binned = binned_spikes_by_trial.get(trial['index'], np.zeros((bin_count, n_neurons)))
+                binned[:, n] = spikes
+                binned_spikes_by_trial[trial['index']] = binned
         return binned_spikes_by_trial
 
-    def get_data(self, clusters, binned_spikes_by_trial, spectrograms):
-        stimulus_from_trial = dict(chain.from_iterable([
-            [(trial['index'], trial['stim']) for trial in n['pprox']
-        ] for n in clusters.values()]))
-        stim_on_from_trial = dict(chain.from_iterable([
-            [(trial['index'], trial['stim_on']) for trial in n['pprox']
-        ] for n in clusters.values()]))
-        trial_list = stimulus_from_trial.keys()
-        assert len(trial_list) == 100
+    def _get_bin_count(self, trial, sampling_rate):
+        spike_duration = (trial['recording']['stop'] - trial['recording']['start']) \
+                / sampling_rate
+        return int(spike_duration / self.time_step)
+
+    def _get_stim_on(self, trial):
+        return int(self.stim_on_from_trial[trial] / self.time_step)
+
+    def _get_data(self, clusters, binned_spikes_by_trial, spectrograms):
         neural_data = []
         stimuli_data = []
-        for trial in trial_list:
-            stimulus = spectrograms[stimulus_from_trial[trial]].T
-            stim_on = int(stim_on_from_trial[trial] / self.time_step)
+        for trial in self.trial_list:
+            stimulus = spectrograms[self.stimulus_from_trial[trial]].T
+            stim_on = self._get_stim_on(trial)
             for step, stim in enumerate(stimulus, start=stim_on):
                 start, stop = self.lookahead
                 window_start = step + start
