@@ -44,16 +44,16 @@ class Dataset():
         self.stimuli = activity.apply(
                 lambda x: self._spectrogram(x.name[0], wav_data),
                 axis='columns'
-        )
+        ).sort_index()
         activity['events'] = activity.groupby(level=1, axis='columns') \
                 .apply(lambda x: x.droplevel(1, axis='columns') \
                     .apply(self._stagger, axis='columns')
                 )
-        self.activity = activity
+        self.activity = activity.sort_index()
 
     def _spectrogram(self, stimulus, wav_data):
         sample_rate, samples = wav_data[stimulus]
-        return gtgram(
+        spectrogram = gtgram(
                 samples,
                 sample_rate,
                 window_time=self.time_step,
@@ -61,7 +61,8 @@ class Dataset():
                 channels=self.frequency_bin_count,
                 f_min=self.min_frequency,
                 f_max=self.max_frequency
-        ).T
+        )
+        return spectrogram.T
 
     def _hist(self, row):
         duration = (row['recording']['stop'] - row['recording']['start']) \
