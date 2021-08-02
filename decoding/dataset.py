@@ -11,12 +11,16 @@ class Dataset():
     def __init__(self, pprox_path_format, wav_path_format,
             time_step=0.005, frequency_bin_count=100,
             min_frequency=200, max_frequency=8000,
-            tau=0.050, select_clusters=None):
+            tau=0.050, select_clusters=None,
+            window_scale=1):
         """
             pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
             wav_path_format: e.g. 'wav/{}.wav'
+            tau: length of window (in secs) to consider in prediction
+            window_scale: ratio of gammatone window size to time_step
         """
         self.time_step = time_step
+        self.window_scale = window_scale
         self.frequency_bin_count = frequency_bin_count
         self.min_frequency = min_frequency
         self.max_frequency = max_frequency
@@ -56,7 +60,7 @@ class Dataset():
         spectrogram = gtgram(
                 samples,
                 sample_rate,
-                window_time=self.time_step,
+                window_time=self.time_step*self.window_scale,
                 hop_time=self.time_step,
                 channels=self.frequency_bin_count,
                 f_min=self.min_frequency,
