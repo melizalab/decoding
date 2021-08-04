@@ -82,7 +82,7 @@ class Dataset():
         stop = start + self.stimuli[row.name].shape[0]
         return hankel(
                 row['events'][start:stop],
-                row['events'][start:start+window_length]
+                row['events'][stop - 1 : stop - 1 + window_length]
         )
 
     def to_steps(self, time_in_seconds):
