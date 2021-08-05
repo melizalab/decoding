@@ -11,8 +11,7 @@ class Dataset():
     def __init__(self, pprox_path_format, wav_path_format,
             time_step=0.005, frequency_bin_count=100,
             min_frequency=200, max_frequency=8000,
-            tau=0.050, select_clusters=None,
-            window_scale=1):
+            tau=0.050, window_scale=1):
         """
             pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
             wav_path_format: e.g. 'wav/{}.wav'
@@ -26,7 +25,7 @@ class Dataset():
         self.max_frequency = max_frequency
         self.tau = tau
 
-        clusters = io.load_pprox(pprox_path_format, select_clusters)
+        clusters = io.load_pprox(pprox_path_format)
         assert len(clusters) > 0, "no clusters"
         # for simplicity, assume every pprox has same sampling rate
         arbitrary_cluster = next(iter(clusters.values()))
@@ -54,6 +53,18 @@ class Dataset():
                     .apply(self._stagger, axis='columns')
                 )
         self.activity = activity.sort_index()
+        assert np.array_equal(self.activity.index, self.stimuli.index)
+
+
+    def __getitem__(self, key):
+        """
+        get numpy arrays representing the activity and the stimuli
+        at the given pandas index range
+        """
+        events = self.activity.loc[key]['events']
+        activity = np.concatenate([np.stack(x,axis=2) for x in events.values.tolist()])
+        stimuli = np.concatenate(self.stimuli.loc[key].values)
+        return activity, stimuli
 
     def _spectrogram(self, stimulus, wav_data):
         sample_rate, samples = wav_data[stimulus]
