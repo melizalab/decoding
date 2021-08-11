@@ -17,7 +17,10 @@ def load_pprox(path_format, cluster_names=None):
     clusters = {}
     for name, path in _get_filenames(path_format, cluster_names):
         with open(path, 'r') as pprox_file:
-            clusters[name] = json.load(pprox_file)
+            json_data = json.load(pprox_file)
+            if json_data.get('experiment') == 'induction':
+                _margot_data_shim(json_data)
+            clusters[name] = json_data
     return clusters
 
 def load_stimuli(path_format, stimuli_names=None):
@@ -42,3 +45,17 @@ def _get_filenames(path_format, names):
     else:
         filenames = map(path_format.format, names)
     return zip(names, filenames)
+
+def _margot_data_shim(json_data):
+    for trial in json_data['pprox']:
+        _rename_key(trial, 'event', 'events')
+        if trial.get('units') == 'ms':
+            del trial['units']
+            trial['events'] = [x / 1000 for x in trial['events']]
+        _rename_key(trial, 'stim_uuid', 'stim')
+        _rename_key(trial, 'trial', 'index')
+    return json_data
+
+def _rename_key(obj, old_name, new_name):
+    obj[new_name] = obj[old_name]
+    del obj[old_name]

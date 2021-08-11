@@ -11,7 +11,7 @@ class Dataset():
     def __init__(self, pprox_path_format, wav_path_format,
             time_step=0.005, frequency_bin_count=100,
             min_frequency=200, max_frequency=8000,
-            tau=0.050, window_scale=1):
+            tau=0.050, window_scale=1, cluster_list=None):
         """
             pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
             wav_path_format: e.g. 'wav/{}.wav'
@@ -25,11 +25,8 @@ class Dataset():
         self.max_frequency = max_frequency
         self.tau = tau
 
-        clusters = io.load_pprox(pprox_path_format)
+        clusters = io.load_pprox(pprox_path_format, cluster_list)
         assert len(clusters) > 0, "no clusters"
-        # for simplicity, assume every pprox has same sampling rate
-        arbitrary_cluster = next(iter(clusters.values()))
-        self.neural_sampling_rate = arbitrary_cluster['entry_metadata'][0]['sampling_rate']
         activity = pd.concat(
                 {k: pd.DataFrame(v['pprox']) \
                         .set_index(['stim','index']) \
@@ -43,9 +40,10 @@ class Dataset():
                 .apply(self._hist, axis='columns')
             )
         stimuli_names = set(s for s, _ in activity.index)
-        wav_data = pd.Series(io.load_stimuli(wav_path_format, stimuli_names))
+        wav_data = io.load_stimuli(wav_path_format, stimuli_names)
+        spectrograms = {k: self._spectrogram(v) for k, v in wav_data.items()}
         self.stimuli = activity.apply(
-                lambda x: self._spectrogram(x.name[0], wav_data),
+                lambda x: spectrograms[x.name[0]],
                 axis='columns'
         ).sort_index()
         activity['events'] = activity.groupby(level=1, axis='columns') \
@@ -54,6 +52,7 @@ class Dataset():
                 )
         self.activity = activity.sort_index()
         assert np.array_equal(self.activity.index, self.stimuli.index)
+        self.index = self.activity.index
 
 
     def __getitem__(self, key):
@@ -66,8 +65,8 @@ class Dataset():
         stimuli = np.concatenate(self.stimuli.loc[key].values)
         return activity, stimuli
 
-    def _spectrogram(self, stimulus, wav_data):
-        sample_rate, samples = wav_data[stimulus]
+    def _spectrogram(self, wav_data):
+        sample_rate, samples = wav_data
         spectrogram = gtgram(
                 samples,
                 sample_rate,
@@ -80,8 +79,7 @@ class Dataset():
         return spectrogram.T
 
     def _hist(self, row):
-        duration = (row['recording']['stop'] - row['recording']['start']) \
-                / self.neural_sampling_rate
+        duration = np.max(row['events']) if len(row['events']) else 0
         # we ignore `duration % time_step` at the end
         bin_edges = np.arange(0, duration, self.time_step)
         histogram, _ = np.histogram(row['events'], bin_edges)
@@ -91,11 +89,25 @@ class Dataset():
         start = self.to_steps(row['stim_on'])
         window_length = self.to_steps(self.tau)
         stop = start + self.stimuli[row.name].shape[0]
+        total_time_steps = start + stop - 1 + window_length
+        pad_width = max(0, total_time_steps - len(row['events']))
+        events = np.pad(row['events'], (0, pad_width))
+        assert len(events) >= total_time_steps
         return hankel(
-                row['events'][start:stop],
-                row['events'][stop - 1 : stop - 1 + window_length]
+                events[start:stop],
+                events[stop - 1 : stop - 1 + window_length]
         )
 
     def to_steps(self, time_in_seconds):
         """Converts a time in seconds to a time in steps"""
         return int(time_in_seconds / self.time_step)
+
+    def pool_trials(self):
+        """Pool spikes across trials"""
+        events = pd.concat({
+                'events': self.activity['events'].groupby('stim').sum()
+            }, axis='columns')
+        self.activity = self.activity.groupby('stim').first() \
+                .drop('events', axis='columns', level=0) \
+                .join(events)
+        self.stimuli = self.stimuli.groupby('stim').first()
