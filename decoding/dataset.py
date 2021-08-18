@@ -7,28 +7,40 @@ from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
 
 class DatasetBuilder():
+    """Construct instances of the `Dataset` class using the builder
+    pattern (https://refactoring.guru/design-patterns/builder)
+    """
     def __init__(self):
         self._dataset = Dataset()
 
     def load_responses(self, pprox_path_format, cluster_list=None):
         """
+            load pprox data
+
             pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
+            cluster_list: optional list of identifiers (that fill in
+            the {} in `pprox_path_format`) to load from the path format.
+            If not provided, load all matching files.
         """
         clusters = io.load_pprox(pprox_path_format, cluster_list)
         assert len(clusters) > 0, "no clusters"
-        activity = pd.concat(
+        responses = pd.concat(
                 {k: pd.DataFrame(v['pprox']) \
                         .set_index(['stim','index']) \
                         for k, v in clusters.items()
                 },
                 axis='columns'
         )
-        activity.columns = activity.columns.reorder_levels(order=[1,0])
-        self._dataset.activity = activity
+        responses.columns = responses.columns.reorder_levels(order=[1,0])
+        self._dataset.responses = responses
 
     def bin_responses(self, time_step=0.005):
+        """
+        transform a time series into bins of size `time_step` containinng
+        the number of spikes that occurred within that time bin.
+        """
         self._dataset.time_step = time_step
-        self._dataset.activity['events'] = self._dataset.activity.groupby(level=1, axis='columns') \
+        self._dataset.responses['events'] = self._dataset.responses.groupby(level=1, axis='columns') \
             .apply(lambda x: x.droplevel(1, axis='columns') \
                 .apply(self._hist, axis='columns')
             )
@@ -44,17 +56,22 @@ class DatasetBuilder():
             window_scale=1, frequency_bin_count=50, min_frequency=200,
             max_frequency=8000):
         """
+            Add a dataframe containing gammatone spectrograms for each
+            stimulus associated with a trial
+
             wav_path_format: e.g. 'wav/{}.wav'
             window_scale: ratio of gammatone window size to time_step
+            stimuli_names: optional list of stimuli identifiers to load.
+            Loads all matching files if not provided.
         """
         self._dataset.window_scale = window_scale
         self._dataset.frequency_bin_count = frequency_bin_count
         self._dataset.min_frequency = min_frequency
         self._dataset.max_frequency = max_frequency
-        stimuli_names = set(s for s, _ in self._dataset.activity.index)
+        stimuli_names = set(s for s, _ in self._dataset.responses.index)
         wav_data = io.load_stimuli(wav_path_format, stimuli_names)
         spectrograms = {k: self._spectrogram(v) for k, v in wav_data.items()}
-        self._dataset.stimuli = self._dataset.activity.apply(
+        self._dataset.stimuli = self._dataset.responses.apply(
                 lambda x: spectrograms[x.name[0]],
                 axis='columns'
         ).sort_index()
@@ -78,7 +95,7 @@ class DatasetBuilder():
         """
 
         self._dataset.tau = tau
-        self._dataset.activity['events'] = self._dataset.activity.groupby(level=1, axis='columns') \
+        self._dataset.responses['events'] = self._dataset.responses.groupby(level=1, axis='columns') \
                 .apply(lambda x: x.droplevel(1, axis='columns') \
                     .apply(self._stagger, axis='columns')
                 )
@@ -99,30 +116,31 @@ class DatasetBuilder():
     def pool_trials(self):
         """Pool spikes across trials"""
         events = pd.concat({
-                'events': self._dataset.activity['events'].groupby('stim').sum()
+                'events': self._dataset.responses['events'].groupby('stim').sum()
             }, axis='columns')
-        self._dataset.activity = self._dataset.activity.groupby('stim').first() \
+        self._dataset.responses = self._dataset.responses.groupby('stim').first() \
                 .drop('events', axis='columns', level=0) \
                 .join(events)
         self._dataset.stimuli = self._dataset.stimuli.groupby('stim').first()
 
     def get_dataset(self):
+        """Return the fully constructed `Dataset` object"""
         dataset = self._dataset
-        dataset.activity = dataset.activity.sort_index()
-        assert np.array_equal(dataset.activity.index, dataset.stimuli.index)
-        dataset.index = dataset.activity.index
+        dataset.responses = dataset.responses.sort_index()
+        assert np.array_equal(dataset.responses.index, dataset.stimuli.index)
+        dataset.index = dataset.responses.index
         return dataset
 
 class Dataset():
     def __getitem__(self, key):
         """
-        get numpy arrays representing the activity and the stimuli
+        get numpy arrays representing the responses and the stimuli
         at the given pandas index range
         """
-        events = self.activity.loc[key]['events']
-        activity = np.concatenate([np.stack(x,axis=2) for x in events.values.tolist()])
+        events = self.responses.loc[key]['events']
+        responses = np.concatenate([np.stack(x,axis=2) for x in events.values.tolist()])
         stimuli = np.concatenate(self.stimuli.loc[key].values)
-        return activity, stimuli
+        return responses, stimuli
 
     def to_steps(self, time_in_seconds):
         """Converts a time in seconds to a time in steps"""
