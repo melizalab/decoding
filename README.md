@@ -15,4 +15,5 @@ response that it induces.
 >>> builder.create_time_lags()
 >>> builder.pool_trials() # optional
 >>> dataset = builder.get_dataset()
+
 ```

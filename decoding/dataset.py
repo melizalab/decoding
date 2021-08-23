@@ -40,10 +40,7 @@ class DatasetBuilder():
         the number of spikes that occurred within that time bin.
         """
         self._dataset.time_step = time_step
-        self._dataset.responses['events'] = self._dataset.responses.groupby(level=1, axis='columns') \
-            .apply(lambda x: x.droplevel(1, axis='columns') \
-                .apply(self._hist, axis='columns')
-            )
+        self._dataset.responses['events'] = self.responses_apply(self._hist)
 
     def _hist(self, row):
         duration = np.max(row['events']) if len(row['events']) else 0
@@ -95,10 +92,7 @@ class DatasetBuilder():
         """
 
         self._dataset.tau = tau
-        self._dataset.responses['events'] = self._dataset.responses.groupby(level=1, axis='columns') \
-                .apply(lambda x: x.droplevel(1, axis='columns') \
-                    .apply(self._stagger, axis='columns')
-                )
+        self._dataset.responses['events'] = self.responses_apply(self._stagger)
 
     def _stagger(self, row):
         start = self._dataset.to_steps(row['stim_on'])
@@ -113,6 +107,17 @@ class DatasetBuilder():
                 events[stop - 1 : stop - 1 + window_length]
         )
 
+    def project_responses(self, basis, num_basis_functions, **kwargs):
+        """
+        optionally project binned responses to a new basis
+
+        basis: a class that inherits from decoding.basisfunctions.Basis
+        """
+        num_timesteps = self._dataset.to_steps(self._dataset.tau)
+        _basis = basis(num_basis_functions, num_timesteps, **kwargs)
+        project = lambda row: np.dot(row['events'], _basis.get_basis())
+        self._dataset.responses['events'] = self.responses_apply(project)
+
     def pool_trials(self):
         """Pool spikes across trials"""
         events = pd.concat({
@@ -122,6 +127,21 @@ class DatasetBuilder():
                 .drop('events', axis='columns', level=0) \
                 .join(events)
         self._dataset.stimuli = self._dataset.stimuli.groupby('stim').first()
+
+    def responses_apply(self, func):
+        """
+            Responses has a complex structure; this function provides a
+            simple way to apply a function to each row
+
+            function: (row of responses dataframe) -> (element of output series)
+
+            returns (pandas.Series): the collected outputs of `func`
+        """
+        return self._dataset.responses.groupby(level=1, axis='columns') \
+                .apply(lambda x: x.droplevel(1, axis='columns') \
+                    .apply(func, axis='columns')
+                )
+
 
     def get_dataset(self):
         """Return the fully constructed `Dataset` object"""
