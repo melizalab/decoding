@@ -1,7 +1,7 @@
 """File I/O methods"""
 import json
 from glob import glob
-from parse import parse
+import parse
 from scipy.io import wavfile
 
 def load_pprox(path_format, cluster_names=None):
@@ -39,9 +39,17 @@ def load_stimuli(path_format, stimuli_names=None):
     return stimuli
 
 def _get_filenames(path_format, names):
+    assert path_format.find('{}') != -1, (
+            'path_format should include empty braces where a wildcard'
+            ' would go.\n'
+            'For example, "{}.pprox" will load all files in the current'
+            ' directory that end in ".pprox". The contents of each file'
+            ' will be named with the part of the filename before ".pprox".'
+        )
+    parser = parse.compile(path_format)
     if names is None:
         filenames = glob(path_format.format("*"))
-        names = map(lambda p: parse(path_format, p)[0], filenames)
+        names = map(lambda p: parser.parse(p)[0], filenames)
     else:
         filenames = map(path_format.format, names)
     return zip(names, filenames)
