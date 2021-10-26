@@ -1,10 +1,16 @@
 """Loading data for neural decoding
 """
-from . import io
+import os
+
 import numpy as np
 import pandas as pd
+from joblib import Memory
+from appdirs import user_cache_dir
 from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
+
+from . import io
+import decoding
 
 class DatasetBuilder():
     """Construct instances of the `Dataset` class using the builder
@@ -12,6 +18,9 @@ class DatasetBuilder():
     """
     def __init__(self):
         self._dataset = Dataset()
+        cache_dir = user_cache_dir(decoding.appname, decoding.appauthor)
+        self.memory = Memory(cache_dir, verbose=0)
+
 
     def load_responses(self, pprox_path_format, cluster_list=None):
         """
@@ -50,7 +59,7 @@ class DatasetBuilder():
         return histogram
 
     def add_stimuli(self, wav_path_format, stimuli_names=None,
-            window_scale=1, frequency_bin_count=50, min_frequency=200,
+            window_scale=1, frequency_bin_count=50, min_frequency=500,
             max_frequency=8000):
         """
             Add a dataframe containing gammatone spectrograms for each
@@ -73,9 +82,9 @@ class DatasetBuilder():
                 axis='columns'
         ).sort_index()
 
-    def _spectrogram(self, wav_data):
+    def _spectrogram(self, wav_data,log_transform = True, compress =1):
         sample_rate, samples = wav_data
-        spectrogram = gtgram(
+        spectrogram = self.memory.cache(gtgram)(
                 samples,
                 sample_rate,
                 window_time=self._dataset.time_step*self._dataset.window_scale,
@@ -84,6 +93,8 @@ class DatasetBuilder():
                 f_min=self._dataset.min_frequency,
                 f_max=self._dataset.max_frequency
         )
+        if log_transform:
+            spectrogram = np.log10(spectrogram+compress)-np.log10(compress)
         return spectrogram.T
 
     def create_time_lags(self, tau=0.300):
