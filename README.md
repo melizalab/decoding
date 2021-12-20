@@ -17,3 +17,13 @@ response that it induces.
 >>> dataset = builder.get_dataset()
 
 ```
+
+## Running tests
+Install dev dependencies:
+```
+pip install -r requirements-dev.txt
+```
+Run tests:
+```
+pytest
+```

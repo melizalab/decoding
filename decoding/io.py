@@ -3,14 +3,100 @@ import json
 from glob import glob
 import parse
 from scipy.io import wavfile
+from abc import ABC, abstractmethod
+from . import dataset
 
-def load_pprox(path_format, cluster_names=None):
+class DataSource(ABC):
+    """Abstract class for data source
+
+    Provides a common interface for concrete classes,
+    which will define how to identify data (e.g. local path, URL)
+    """
+    @abstractmethod
+    def get_responses(self):
+        """returns dictionary mapping names of files to pprox data
+        """
+
+    @abstractmethod
+    def get_stimuli(self):
+        """returns dictionary mapping names of files to (sample_rate, samples) tuples
+        """
+
+
+class FsSource(DataSource):
+    """Loads data from local File System
+    """
+    def __init__(self, pprox_path_format, wav_path_format, stimuli_names=None, cluster_list=None):
+        self.pprox_path_format = pprox_path_format
+        self.cluster_list = cluster_list
+        self.wav_path_format = wav_path_format
+        self.stimuli_names = stimuli_names
+        self.get_stimuli = dataset.mem.cache(self.get_stimuli)
+
+    def get_responses(self):
+        """
+            load pprox data
+
+            pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
+            cluster_list: optional list of identifiers (that fill in
+            the {} in `pprox_path_format`) to load from the path format.
+            If not provided, load all matching files.
+        """
+        return load_pprox(
+                self.pprox_path_format,
+                cluster_names=self.cluster_list,
+        )
+
+    def get_stimuli(self):
+        """
+            wav_path_format: e.g. 'wav/{}.wav'
+            stimuli_names: optional list of stimuli identifiers to load.
+            Loads all matching files if not provided.
+        """
+        return load_stimuli(self.wav_path_format, self.stimuli_names)
+
+
+class MemorySource(DataSource):
+    """Loads data from given dictionaries
+    """
+    def __init__(self, responses, stimuli):
+        self.responses = responses
+        self.stimuli = stimuli
+
+    def get_responses(self):
+        return self.responses
+
+    def get_stimuli(self):
+        return self.stimuli
+
+def fix_pprox(responses, durations={}):
+    for json_data in responses.values():
+        if json_data.get('$schema') == "https://meliza.org/spec:2/stimtrial.json#":
+            pass
+        # if the pprox does not conform to the stimtrial spec,
+        # we need to try to guess what format it is, and modify it
+        # accordingly
+        elif json_data.get('experiment') == 'induction':
+            _margot_data_shim(json_data)
+            _sam_data_shim(json_data, durations)
+        elif json_data.get('protocol') == 'songs':
+            _sam_data_shim(json_data, durations)
+        else:
+            print("unrecognized pprox format")
+        for i, trial in enumerate(json_data['pprox']):
+            trial['stim'] = trial['stimulus']['name']
+            trial['index'] = i
+    return responses
+
+def load_pprox(path_format, cluster_names=None, durations=None):
     """Load pprox files into a dictionary
         path_format: path containing "{}" which will be globbed
                      for all matching files and then parsed as
                      JSON
         cluster_names (iterable): if specified, load only the clusters
                        with the given names
+        durations: dictionary of stim name -> stim duration in case
+                    this info is not included in the pprox file
         returns: dictionary mapping the part of the filenames
                  represented by "{}" to their parsed contents
     """
@@ -18,8 +104,6 @@ def load_pprox(path_format, cluster_names=None):
     for name, path in _get_filenames(path_format, cluster_names):
         with open(path, 'r') as pprox_file:
             json_data = json.load(pprox_file)
-            if json_data.get('experiment') == 'induction':
-                _margot_data_shim(json_data)
             clusters[name] = json_data
     return clusters
 
@@ -62,6 +146,23 @@ def _margot_data_shim(json_data):
             trial['events'] = [x / 1000 for x in trial['events']]
         _rename_key(trial, 'stim_uuid', 'stim')
         _rename_key(trial, 'trial', 'index')
+    return json_data
+
+def _sam_data_shim(json_data, durations):
+    for trial in json_data['pprox']:
+        sampling_rate = 1
+        trial['interval'] = [
+                trial['recording']['start'] / sampling_rate,
+                trial['recording']['stop'] / sampling_rate
+        ]
+        del trial['recording']
+        stim_off = durations[trial['stim']]
+        trial['stimulus'] = {
+                'name': trial['stim'],
+                'interval': [trial['stim_on'], stim_off]
+        }
+        del trial['stim']
+        del trial['stim_on']
     return json_data
 
 def _rename_key(obj, old_name, new_name):
