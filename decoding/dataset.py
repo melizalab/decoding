@@ -28,11 +28,8 @@ class DatasetBuilder():
         self.data_source = data_source
 
     def load_responses(self):
-        stimuli = self.data_source.get_stimuli()
-        durations = {name: len(s)/fs for name, (fs, s) in stimuli.items()}
-        clusters = io.fix_pprox(self.data_source.get_responses(), durations=durations)
+        clusters = self.data_source.get_responses()
         assert len(clusters) > 0, "no clusters"
-        print(clusters)
         responses = pd.concat(
                 {k: pd.DataFrame(v['pprox']) \
                         .set_index(['stim','index']) \

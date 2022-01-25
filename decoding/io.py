@@ -13,14 +13,31 @@ class DataSource(ABC):
     which will define how to identify data (e.g. local path, URL)
     """
     @abstractmethod
-    def get_responses(self):
+    def get_raw_responses(self):
         """returns dictionary mapping names of files to pprox data
+
+            pprox may be in the incorrect format
         """
+
+    def get_responses(self):
+        """returns dictionary mapping names of files to stimtrial pprox data
+        """
+        responses = self.get_raw_responses()
+        stimuli = self.get_stimuli()
+        durations = {name: len(s)/fs for name, (fs, s) in stimuli.items()}
+        return _fix_pprox(responses, durations)
 
     @abstractmethod
     def get_stimuli(self):
         """returns dictionary mapping names of files to (sample_rate, samples) tuples
         """
+
+    def __eq__(self, other) -> bool:
+        return (
+                (self.get_responses() == other.get_responses())
+                and
+                (self.get_stimuli() == other.get_stimuli())
+                )
 
 
 class FsSource(DataSource):
@@ -33,7 +50,7 @@ class FsSource(DataSource):
         self.stimuli_names = stimuli_names
         self.get_stimuli = dataset.mem.cache(self.get_stimuli)
 
-    def get_responses(self):
+    def get_raw_responses(self):
         """
             load pprox data
 
@@ -63,30 +80,11 @@ class MemorySource(DataSource):
         self.responses = responses
         self.stimuli = stimuli
 
-    def get_responses(self):
+    def get_raw_responses(self):
         return self.responses
 
     def get_stimuli(self):
         return self.stimuli
-
-def fix_pprox(responses, durations={}):
-    for json_data in responses.values():
-        if json_data.get('$schema') == "https://meliza.org/spec:2/stimtrial.json#":
-            pass
-        # if the pprox does not conform to the stimtrial spec,
-        # we need to try to guess what format it is, and modify it
-        # accordingly
-        elif json_data.get('experiment') == 'induction':
-            _margot_data_shim(json_data)
-            _sam_data_shim(json_data, durations)
-        elif json_data.get('protocol') == 'songs':
-            _sam_data_shim(json_data, durations)
-        else:
-            print("unrecognized pprox format")
-        for i, trial in enumerate(json_data['pprox']):
-            trial['stim'] = trial['stimulus']['name']
-            trial['index'] = i
-    return responses
 
 def load_pprox(path_format, cluster_names=None, durations=None):
     """Load pprox files into a dictionary
@@ -138,7 +136,27 @@ def _get_filenames(path_format, names):
         filenames = map(path_format.format, names)
     return zip(names, filenames)
 
-def _margot_data_shim(json_data):
+def _fix_pprox(responses, durations):
+    for json_data in responses.values():
+        if json_data.get('$schema') == "https://meliza.org/spec:2/stimtrial.json#":
+            pass
+        # if the pprox does not conform to the stimtrial spec,
+        # we need to try to guess what format it is, and modify it
+        # accordingly
+        elif json_data.get('experiment') == 'induction':
+            _ar_data_shim(json_data, durations)
+            _cn_data_shim(json_data, durations)
+        elif json_data.get('protocol') == 'songs':
+            _cn_data_shim(json_data, durations)
+        else:
+            print("unrecognized pprox format")
+        for i, trial in enumerate(json_data['pprox']):
+            trial['stim'] = trial['stimulus']['name']
+            trial['index'] = i
+    return responses
+
+def _ar_data_shim(json_data, durations):
+    '''reformat data from auditory-restoration project format to colony-noise project format'''
     for trial in json_data['pprox']:
         _rename_key(trial, 'event', 'events')
         if trial.get('units') == 'ms':
@@ -146,11 +164,22 @@ def _margot_data_shim(json_data):
             trial['events'] = [x / 1000 for x in trial['events']]
         _rename_key(trial, 'stim_uuid', 'stim')
         _rename_key(trial, 'trial', 'index')
+        trial['recording'] = {
+                'start': 0,
+                'stop': trial['stim_on'] + durations[trial['stim']] + 1,
+                }
+    json_data['entry_metadata'] = {'sampling_rate': 1}
+    del json_data['experiment']
+    json_data['protocol'] = 'songs'
     return json_data
 
-def _sam_data_shim(json_data, durations):
+def _cn_data_shim(json_data, durations):
+    '''reformat data from colony-noise project format to stimtrial format'''
+    sampling_rate = json_data['entry_metadata']['sampling_rate']
+    del json_data['entry_metadata']
+    json_data['$schema'] = "https://meliza.org/spec:2/stimtrial.json#"
+    del json_data['protocol']
     for trial in json_data['pprox']:
-        sampling_rate = 1
         trial['interval'] = [
                 trial['recording']['start'] / sampling_rate,
                 trial['recording']['stop'] / sampling_rate
@@ -159,7 +188,7 @@ def _sam_data_shim(json_data, durations):
         stim_off = durations[trial['stim']]
         trial['stimulus'] = {
                 'name': trial['stim'],
-                'interval': [trial['stim_on'], stim_off]
+                'interval': [trial['stim_on'], trial['stim_on'] + stim_off]
         }
         del trial['stim']
         del trial['stim_on']
