@@ -1,9 +1,15 @@
 """File I/O methods"""
 import json
+import asyncio
+import aiohttp
 from glob import glob
 import parse
 from scipy.io import wavfile
+from urllib.parse import urljoin, urlparse
+from appdirs import user_cache_dir
 from abc import ABC, abstractmethod
+from pathlib import Path
+from decoding import appname, appauthor
 from . import dataset
 
 class DataSource(ABC):
@@ -44,6 +50,21 @@ class FsSource(DataSource):
     """Loads data from local File System
     """
     def __init__(self, pprox_path_format, wav_path_format, stimuli_names=None, cluster_list=None):
+        """
+            load pprox data
+
+            pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
+            wav_path_format: e.g. 'wav/{}.wav'
+            cluster_list: optional list of identifiers (that fill in
+                the {} in `pprox_path_format`) to load from the path format.
+                If not provided, load all matching files.
+            stimuli_names: optional list of stimuli identifiers to load.
+                Loads all matching files if not provided.
+        """
+        if not isinstance(pprox_path_format, str):
+            pprox_path_format = str(pprox_path_format)
+        if not isinstance(wav_path_format, str):
+            wav_path_format = str(wav_path_format)
         self.pprox_path_format = pprox_path_format
         self.cluster_list = cluster_list
         self.wav_path_format = wav_path_format
@@ -51,27 +72,66 @@ class FsSource(DataSource):
         self.get_stimuli = dataset.mem.cache(self.get_stimuli)
 
     def get_raw_responses(self):
-        """
-            load pprox data
-
-            pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
-            cluster_list: optional list of identifiers (that fill in
-            the {} in `pprox_path_format`) to load from the path format.
-            If not provided, load all matching files.
-        """
         return load_pprox(
                 self.pprox_path_format,
                 cluster_names=self.cluster_list,
         )
 
     def get_stimuli(self):
-        """
-            wav_path_format: e.g. 'wav/{}.wav'
-            stimuli_names: optional list of stimuli identifiers to load.
-            Loads all matching files if not provided.
-        """
         return load_stimuli(self.wav_path_format, self.stimuli_names)
 
+class NeurobankSource(FsSource):
+    """Downloads data from Neurobank
+    """
+    DOWNLOAD_FORMAT = 'resources/{}/download'
+    def __init__(self, neurobank_registry, pprox_ids, wav_ids):
+        """
+            neurobank_registry: URL
+            pprox_ids: list of resource IDs, or path to file containing such a list
+            wav_ids: list of resource IDs, or path to file containing such a list
+        """
+        self.url_format = urljoin(neurobank_registry, self.DOWNLOAD_FORMAT)
+        self.pprox_ids = self._get_list(pprox_ids)
+        self.wav_ids = self._get_list(wav_ids)
+        parsed_url = urlparse(neurobank_registry)
+        self.cache_dir = Path(user_cache_dir(appname, appauthor)) / parsed_url.netloc
+        responses_dir = self.cache_dir / 'responses'
+        stimuli_dir = self.cache_dir / 'stimuli'
+        responses_dir.mkdir(parents=True, exist_ok=True)
+        stimuli_dir.mkdir(parents=True, exist_ok=True)
+        asyncio.run(self._download_all())
+        super().__init__(
+                responses_dir / '{}',
+                stimuli_dir / '{}',
+                cluster_list=pprox_ids,
+                stimuli_names=wav_ids,
+        )
+
+    @staticmethod
+    def _get_list(resource_ids):
+        if isinstance(resource_ids, list):
+            return resource_ids
+        if isinstance(resource_ids, str):
+            with open(resource_ids, 'r') as fd:
+                return fd.read().split('\n')
+        raise ValueError("input should be a list or a filename")
+
+    async def _download(self, resource_id, session, folder):
+        url = self.url_format.format(resource_id)
+        path = Path(self.cache_dir / folder / resource_id)
+        if path.is_file():
+            return
+        async with session.get(str(url)) as resp:
+            with open(path, 'wb') as fd:
+                async for chunk in resp.content.iter_chunked(1024):
+                    fd.write(chunk)
+
+    async def _download_all(self):
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            await asyncio.gather(
+                    *[self._download(url, session, 'responses') for url in self.pprox_ids],
+                    *[self._download(url, session, 'stimuli') for url in self.wav_ids]
+            )
 
 class MemorySource(DataSource):
     """Loads data from given dictionaries
@@ -149,11 +209,17 @@ def _fix_pprox(responses, durations):
         elif json_data.get('protocol') == 'songs':
             _cn_data_shim(json_data, durations)
         else:
-            print("unrecognized pprox format")
+            raise UnrecognizedPproxFormat
         for i, trial in enumerate(json_data['pprox']):
             trial['stim'] = trial['stimulus']['name']
             trial['index'] = i
     return responses
+
+
+class UnrecognizedPproxFormat(Exception):
+    def __str__(self):
+        return "could not detect pprox format, try making sure the pprox conforms to stimtrial and that '$schema' is set"
+
 
 def _ar_data_shim(json_data, durations):
     '''reformat data from auditory-restoration project format to colony-noise project format'''
@@ -175,7 +241,10 @@ def _ar_data_shim(json_data, durations):
 
 def _cn_data_shim(json_data, durations):
     '''reformat data from colony-noise project format to stimtrial format'''
-    sampling_rate = json_data['entry_metadata']['sampling_rate']
+    metadata = json_data['entry_metadata']
+    if isinstance(metadata, list):
+        metadata = metadata[0]
+    sampling_rate = metadata['sampling_rate']
     del json_data['entry_metadata']
     json_data['$schema'] = "https://meliza.org/spec:2/stimtrial.json#"
     del json_data['protocol']
