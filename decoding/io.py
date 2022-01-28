@@ -101,12 +101,16 @@ class NeurobankSource(FsSource):
         stimuli_dir = self.cache_dir / 'stimuli'
         responses_dir.mkdir(parents=True, exist_ok=True)
         stimuli_dir.mkdir(parents=True, exist_ok=True)
-        asyncio.run(self._download_all())
+        try:
+            asyncio.run(self._download_all())
+        except RuntimeError:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._download_all())
         super().__init__(
                 responses_dir / '{}',
                 stimuli_dir / '{}',
-                cluster_list=pprox_ids,
-                stimuli_names=wav_ids,
+                cluster_list=self.pprox_ids,
+                stimuli_names=self.wav_ids,
         )
 
     @staticmethod
@@ -115,7 +119,7 @@ class NeurobankSource(FsSource):
             return resource_ids
         if isinstance(resource_ids, str):
             with open(resource_ids, 'r') as fd:
-                return fd.read().split('\n')
+                return fd.read().splitlines()
         raise ValueError("input should be a list or a filename")
 
     async def _download(self, resource_id, session, folder):
