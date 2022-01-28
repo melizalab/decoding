@@ -19,7 +19,7 @@ class DataSource(ABC):
     which will define how to identify data (e.g. local path, URL)
     """
     @abstractmethod
-    def get_raw_responses(self):
+    def _get_raw_responses(self):
         """returns dictionary mapping names of files to pprox data
 
             pprox may be in the incorrect format
@@ -28,7 +28,7 @@ class DataSource(ABC):
     def get_responses(self):
         """returns dictionary mapping names of files to stimtrial pprox data
         """
-        responses = self.get_raw_responses()
+        responses = self._get_raw_responses()
         stimuli = self.get_stimuli()
         durations = {name: len(s)/fs for name, (fs, s) in stimuli.items()}
         return _fix_pprox(responses, durations)
@@ -53,25 +53,27 @@ class FsSource(DataSource):
         """
             load pprox data
 
-            pprox_path_format: e.g. 'pprox/P120_1_1_{}.pprox'
-            wav_path_format: e.g. 'wav/{}.wav'
-            cluster_list: optional list of identifiers (that fill in
-                the {} in `pprox_path_format`) to load from the path format.
-                If not provided, load all matching files.
-            stimuli_names: optional list of stimuli identifiers to load.
-                Loads all matching files if not provided.
         """
         if not isinstance(pprox_path_format, str):
             pprox_path_format = str(pprox_path_format)
         if not isinstance(wav_path_format, str):
             wav_path_format = str(wav_path_format)
-        self.pprox_path_format = pprox_path_format
-        self.cluster_list = cluster_list
-        self.wav_path_format = wav_path_format
-        self.stimuli_names = stimuli_names
+        self.pprox_path_format: str = pprox_path_format
+        """e.g. 'pprox/P120_1_1_{}.pprox'"""
+        self.cluster_list: list = cluster_list
+        """optional list of identifiers (that fill in
+                the {} in `pprox_path_format`) to load from the path format.
+                If not provided, load all matching files.
+        """
+        self.wav_path_format: str = wav_path_format
+        """e.g. 'wav/{}.wav'"""
+        self.stimuli_names: list = stimuli_names
+        """optional list of stimuli identifiers to load.
+                Loads all matching files if not provided.
+        """
         self.get_stimuli = dataset.mem.cache(self.get_stimuli)
 
-    def get_raw_responses(self):
+    def _get_raw_responses(self):
         return load_pprox(
                 self.pprox_path_format,
                 cluster_names=self.cluster_list,
@@ -83,16 +85,16 @@ class FsSource(DataSource):
 class NeurobankSource(FsSource):
     """Downloads data from Neurobank
     """
-    DOWNLOAD_FORMAT = 'resources/{}/download'
+    _DOWNLOAD_FORMAT = 'resources/{}/download'
     def __init__(self, neurobank_registry, pprox_ids, wav_ids):
         """
             neurobank_registry: URL
-            pprox_ids: list of resource IDs, or path to file containing such a list
-            wav_ids: list of resource IDs, or path to file containing such a list
         """
-        self.url_format = urljoin(neurobank_registry, self.DOWNLOAD_FORMAT)
+        self.url_format = urljoin(neurobank_registry, self._DOWNLOAD_FORMAT)
         self.pprox_ids = self._get_list(pprox_ids)
+        """list of resource IDs, or path to file containing such a list"""
         self.wav_ids = self._get_list(wav_ids)
+        """list of resource IDs, or path to file containing such a list"""
         parsed_url = urlparse(neurobank_registry)
         self.cache_dir = Path(user_cache_dir(appname, appauthor)) / parsed_url.netloc
         responses_dir = self.cache_dir / 'responses'
@@ -140,7 +142,7 @@ class MemorySource(DataSource):
         self.responses = responses
         self.stimuli = stimuli
 
-    def get_raw_responses(self):
+    def _get_raw_responses(self):
         return self.responses
 
     def get_stimuli(self):

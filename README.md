@@ -8,6 +8,13 @@ response that it induces.
 
 Consult [decoding/test_dataset.py].
 
+## Documentation
+
+```
+pip install pdoc
+pdoc decoding
+```
+
 ## Running tests
 Install dev dependencies:
 ```

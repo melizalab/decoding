@@ -1,3 +1,8 @@
+"""
+.. include:: ../README.md
+"""
+__docformat__ = "restructuredtext"
+
 appname = "decoding"
 appauthor = "melizalab"
 
