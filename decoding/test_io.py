@@ -1,6 +1,6 @@
 from decoding.io import NeurobankSource
 
-def test_neurobank():
+async def test_neurobank():
     stimuli = ['ztqee46x',
             '00oagdl5',
             'g29wxi4q',
@@ -14,6 +14,7 @@ def test_neurobank():
             'p1mrfhop',
             ]
     responses = ['P120_1_1_c92']
-    source = NeurobankSource('https://gracula.psyc.virginia.edu/neurobank/', responses, stimuli)
+    url = 'https://gracula.psyc.virginia.edu/neurobank/'
+    source = await NeurobankSource.create(url, responses, stimuli)
     assert len(source.get_responses()) == 1
     assert len(source.get_stimuli()) == len(stimuli)

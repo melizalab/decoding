@@ -83,35 +83,51 @@ class FsSource(DataSource):
         return load_stimuli(self.wav_path_format, self.stimuli_names)
 
 class NeurobankSource(FsSource):
-    """Downloads data from Neurobank
+    """Downloads data from Neurobank and caches the files
+
+    `NeurobankSource` uses asynchronous network calls in order to download
+    resources in parallel. As a result, it must be initialized in a special
+    way:
+    ```
+    stimuli = ['ztqee46x', '00oagdl5', 'g29wxi4q', 'mrel2o09', 'vekibwgj',
+    'l1a3ltpy', 'igmi8fxa', 'c95zqjxq', 'w08e1crn', 'jkexyrd5', 'p1mrfhop', ]
+    responses = ['P120_1_1_c92']
+    url = 'https://gracula.psyc.virginia.edu/neurobank/'
+    data_source = await NeurobankSource.create(url, responses, stimuli)
+    ```
     """
     _DOWNLOAD_FORMAT = 'resources/{}/download'
-    def __init__(self, neurobank_registry, pprox_ids, wav_ids):
+    @classmethod
+    async def create(cls, neurobank_registry: str, pprox_ids, wav_ids):
         """
-            neurobank_registry: URL
+            `neurobank_registry`: URL of Neurobank instance
+
+            both `pprox_ids` and `wav_ids` may either be a
+            list of resource IDs, or path to a file containing such a list
         """
+        self = NeurobankSource()
         self.url_format = urljoin(neurobank_registry, self._DOWNLOAD_FORMAT)
         self.pprox_ids = self._get_list(pprox_ids)
-        """list of resource IDs, or path to file containing such a list"""
         self.wav_ids = self._get_list(wav_ids)
-        """list of resource IDs, or path to file containing such a list"""
         parsed_url = urlparse(neurobank_registry)
         self.cache_dir = Path(user_cache_dir(appname, appauthor)) / parsed_url.netloc
         responses_dir = self.cache_dir / 'responses'
         stimuli_dir = self.cache_dir / 'stimuli'
         responses_dir.mkdir(parents=True, exist_ok=True)
         stimuli_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            asyncio.run(self._download_all())
-        except RuntimeError:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._download_all())
+        await self._download_all()
         super().__init__(
+                self,
                 responses_dir / '{}',
                 stimuli_dir / '{}',
                 cluster_list=self.pprox_ids,
                 stimuli_names=self.wav_ids,
         )
+        return self
+
+    def __init__(self):
+        """`NeurobankSource` cannot be directly initialized. Use `NeurobankSource.create` instead.
+        """
 
     @staticmethod
     def _get_list(resource_ids):
