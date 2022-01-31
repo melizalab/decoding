@@ -12,7 +12,7 @@ from scipy.linalg import hankel
 from . import io
 import decoding
 
-_cache_dir = user_cache_dir(decoding.appname, decoding.appauthor)
+_cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
 mem = Memory(_cache_dir, verbose=0)
 
 class DatasetBuilder():

@@ -3,8 +3,8 @@
 """
 __docformat__ = "restructuredtext"
 
-appname = "decoding"
-appauthor = "melizalab"
+APP_NAME = "decoding"
+APP_AUTHOR = "melizalab"
 
 from decoding.dataset import Dataset, DatasetBuilder
 from decoding import basisfunctions

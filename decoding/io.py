@@ -9,14 +9,15 @@ from urllib.parse import urljoin, urlparse
 from appdirs import user_cache_dir
 from abc import ABC, abstractmethod
 from pathlib import Path
-from decoding import appname, appauthor
+from decoding import APP_NAME, APP_AUTHOR
 from . import dataset
 
 class DataSource(ABC):
-    """Abstract class for data source
+    """Abstract class for data sources to inherit from
 
-    Provides a common interface for concrete classes,
-    which will define how to identify data (e.g. local path, URL)
+    Concrete child implementations must define how to load data (e.g. local path, URL).
+    By inheriting from this class, they provide a standardized interface to
+    access the data
     """
     @abstractmethod
     def _get_raw_responses(self):
@@ -49,38 +50,103 @@ class DataSource(ABC):
 class FsSource(DataSource):
     """Loads data from local File System
     """
-    def __init__(self, pprox_path_format, wav_path_format, stimuli_names=None, cluster_list=None):
-        """
-            load pprox data
+    def __init__(
+            self,
+            pprox_path_format: str,
+            wav_path_format: str,
+            stimuli_names=None,
+            cluster_list=None
+        ):
+        """initialize with path to data
 
+        Paths are specified with a format string, where `{}` is used to
+        represent the part of the path/filename that determines the identity of
+        the file contents. This way, files identifiers do not need to contain
+        redundant information, such as file extension. If a list of identifers
+        is not specified, the wildcard `*` will be substituted for `{}` to load
+        all matching files.
+
+        `pprox_path_format`: e.g. `'pprox/P120_1_1_{}.pprox'`
+
+        `wav_path_format`: e.g. `'wav/{}.wav'`
+
+        `cluster_list`: optional list of response identifiers to load
+
+        `stimuli_names`: optional list of stimuli identifiers to load
         """
         if not isinstance(pprox_path_format, str):
             pprox_path_format = str(pprox_path_format)
         if not isinstance(wav_path_format, str):
             wav_path_format = str(wav_path_format)
         self.pprox_path_format: str = pprox_path_format
-        """e.g. 'pprox/P120_1_1_{}.pprox'"""
         self.cluster_list: list = cluster_list
-        """optional list of identifiers (that fill in
-                the {} in `pprox_path_format`) to load from the path format.
-                If not provided, load all matching files.
-        """
         self.wav_path_format: str = wav_path_format
-        """e.g. 'wav/{}.wav'"""
         self.stimuli_names: list = stimuli_names
-        """optional list of stimuli identifiers to load.
-                Loads all matching files if not provided.
-        """
         self.get_stimuli = dataset.mem.cache(self.get_stimuli)
 
     def _get_raw_responses(self):
-        return load_pprox(
+        return self._load_pprox(
                 self.pprox_path_format,
                 cluster_names=self.cluster_list,
         )
 
     def get_stimuli(self):
-        return load_stimuli(self.wav_path_format, self.stimuli_names)
+        return self._load_stimuli(self.wav_path_format, self.stimuli_names)
+
+    @staticmethod
+    def _load_stimuli(path_format, stimuli_names=None):
+        """Load wav files into a dictionary
+
+            stimuli_names: iterable of strings
+            path_format: path containing "{}" which will be replaced by
+                         each of `stimuli_names`
+
+            returns: dictionary mapping stimuli_names to (sample_rate, samples)
+        """
+        stimuli = {}
+        for name, filename in FsSource._get_filenames(path_format, stimuli_names):
+            sample_rate, samples = wavfile.read(filename)
+            stimuli[name] = (sample_rate, samples)
+        return stimuli
+
+    @staticmethod
+    def _load_pprox(path_format, cluster_names=None, durations=None):
+        """Load pprox files into a dictionary
+            path_format: path containing "{}" which will be globbed
+                         for all matching files and then parsed as
+                         JSON
+            cluster_names (iterable): if specified, load only the clusters
+                           with the given names
+            durations: dictionary of stim name -> stim duration in case
+                        this info is not included in the pprox file
+            returns: dictionary mapping the part of the filenames
+                     represented by "{}" to their parsed contents
+        """
+        clusters = {}
+        for name, path in FsSource._get_filenames(path_format, cluster_names):
+            with open(path, 'r') as pprox_file:
+                json_data = json.load(pprox_file)
+                clusters[name] = json_data
+        return clusters
+
+    @staticmethod
+    def _get_filenames(path_format, names):
+        assert path_format.find('{}') != -1, (
+                'path_format should include empty braces where a wildcard'
+                ' would go.\n'
+                'For example, "{}.pprox" will load all files in the current'
+                ' directory that end in ".pprox". The contents of each file'
+                ' will be named with the part of the filename before ".pprox".'
+            )
+        parser = parse.compile(path_format)
+        if names is None:
+            filenames = glob(path_format.format("*"))
+            names = map(lambda p: parser.parse(p)[0], filenames)
+        else:
+            filenames = map(path_format.format, names)
+        return zip(names, filenames)
+
+
 
 class NeurobankSource(FsSource):
     """Downloads data from Neurobank and caches the files
@@ -110,7 +176,7 @@ class NeurobankSource(FsSource):
         self.pprox_ids = self._get_list(pprox_ids)
         self.wav_ids = self._get_list(wav_ids)
         parsed_url = urlparse(neurobank_registry)
-        self.cache_dir = Path(user_cache_dir(appname, appauthor)) / parsed_url.netloc
+        self.cache_dir = Path(user_cache_dir(APP_NAME, APP_AUTHOR)) / parsed_url.netloc
         responses_dir = self.cache_dir / 'responses'
         stimuli_dir = self.cache_dir / 'stimuli'
         responses_dir.mkdir(parents=True, exist_ok=True)
@@ -158,7 +224,7 @@ class NeurobankSource(FsSource):
 class MemorySource(DataSource):
     """Loads data from given dictionaries
     """
-    def __init__(self, responses, stimuli):
+    def __init__(self, responses: dict, stimuli):
         self.responses = responses
         self.stimuli = stimuli
 
@@ -167,56 +233,6 @@ class MemorySource(DataSource):
 
     def get_stimuli(self):
         return self.stimuli
-
-def load_pprox(path_format, cluster_names=None, durations=None):
-    """Load pprox files into a dictionary
-        path_format: path containing "{}" which will be globbed
-                     for all matching files and then parsed as
-                     JSON
-        cluster_names (iterable): if specified, load only the clusters
-                       with the given names
-        durations: dictionary of stim name -> stim duration in case
-                    this info is not included in the pprox file
-        returns: dictionary mapping the part of the filenames
-                 represented by "{}" to their parsed contents
-    """
-    clusters = {}
-    for name, path in _get_filenames(path_format, cluster_names):
-        with open(path, 'r') as pprox_file:
-            json_data = json.load(pprox_file)
-            clusters[name] = json_data
-    return clusters
-
-def load_stimuli(path_format, stimuli_names=None):
-    """Load wav files into a dictionary
-
-        stimuli_names: iterable of strings
-        path_format: path containing "{}" which will be replaced by
-                     each of `stimuli_names`
-
-        returns: dictionary mapping stimuli_names to (sample_rate, samples)
-    """
-    stimuli = {}
-    for name, filename in _get_filenames(path_format, stimuli_names):
-        sample_rate, samples = wavfile.read(filename)
-        stimuli[name] = (sample_rate, samples)
-    return stimuli
-
-def _get_filenames(path_format, names):
-    assert path_format.find('{}') != -1, (
-            'path_format should include empty braces where a wildcard'
-            ' would go.\n'
-            'For example, "{}.pprox" will load all files in the current'
-            ' directory that end in ".pprox". The contents of each file'
-            ' will be named with the part of the filename before ".pprox".'
-        )
-    parser = parse.compile(path_format)
-    if names is None:
-        filenames = glob(path_format.format("*"))
-        names = map(lambda p: parser.parse(p)[0], filenames)
-    else:
-        filenames = map(path_format.format, names)
-    return zip(names, filenames)
 
 def _fix_pprox(responses, durations):
     for json_data in responses.values():
@@ -239,8 +255,10 @@ def _fix_pprox(responses, durations):
 
 
 class UnrecognizedPproxFormat(Exception):
+    """Exception raised when the needed metadata could not be found in a pprox file"""
     def __str__(self):
-        return "could not detect pprox format, try making sure the pprox conforms to stimtrial and that '$schema' is set"
+        return ("could not detect pprox format, try making sure"
+        "the pprox conforms to stimtrial and that '$schema' is set")
 
 
 def _ar_data_shim(json_data, durations):
