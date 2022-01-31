@@ -6,7 +6,7 @@ response that it induces.
 
 ## Examples
 
-Consult [decoding/test_dataset.py].
+Consult [decoding/_test/test_dataset.py].
 
 ## Documentation
 
@@ -20,7 +20,9 @@ Install dev dependencies:
 ```
 pip install -r requirements-dev.txt
 ```
+
 Run tests:
-```
+
+```bash
 pytest
 ```

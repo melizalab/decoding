@@ -9,21 +9,22 @@ from appdirs import user_cache_dir
 from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
 
-from . import io
 import decoding
+from decoding.io import DataSource
 
 _cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
 mem = Memory(_cache_dir, verbose=0)
 
 class DatasetBuilder():
-    """Construct instances of the `Dataset` class using the builder
-    pattern (https://refactoring.guru/design-patterns/builder)
+    """Construct instances of the `Dataset` class using the [builder
+    pattern](https://refactoring.guru/design-patterns/builder)
     """
     def __init__(self):
         self._dataset = Dataset()
+        self.data_source = _EmptySource()
 
     def set_data_source(self, data_source):
-        """ data_source must inherit from io::DataSource
+        """ `data_source`: concrete inheritor of `decoding.io.DataSource`
         """
         self.data_source = data_source
 
@@ -92,7 +93,7 @@ class DatasetBuilder():
 
     def create_time_lags(self, tau=0.300):
         """
-            tau: length of window (in secs) to consider in prediction
+            `tau`: length of window (in secs) to consider in prediction
         """
 
         self._dataset.tau = tau
@@ -115,7 +116,7 @@ class DatasetBuilder():
         """
         optionally project binned responses to a new basis
 
-        basis: a class that inherits from decoding.basisfunctions.Basis
+        `basis`: a class that inherits from `decoding.basisfunctions.Basis`
         """
         num_timesteps = self._dataset.to_steps(self._dataset.tau)
         _basis = basis(num_basis_functions, num_timesteps, **kwargs)
@@ -137,7 +138,7 @@ class DatasetBuilder():
             Responses has a complex structure; this function provides a
             simple way to apply a function to each row
 
-            function: (row of responses dataframe) -> (element of output series)
+            `func`: (row of responses dataframe) -> (element of output series)
 
             returns (pandas.Series): the collected outputs of `func`
         """
@@ -156,6 +157,14 @@ class DatasetBuilder():
         return dataset
 
 class Dataset():
+    """Holds constructed response matrix and stimuli
+
+    ### Example usage
+    ```
+    dataset = dataset_builder.get_dataset()
+    X, Y = dataset[:]
+    ```
+    """
     def __getitem__(self, key):
         """
         get numpy arrays representing the responses and the stimuli
@@ -169,3 +178,27 @@ class Dataset():
     def to_steps(self, time_in_seconds):
         """Converts a time in seconds to a time in steps"""
         return int(time_in_seconds / self.time_step)
+
+class _EmptySource(DataSource):
+    def __init__(self):
+        pass
+
+    def _get_raw_responses(self):
+        self._raise()
+
+    def get_stimuli(self):
+        self._raise()
+
+    @staticmethod
+    def _raise():
+        raise InvalidConstructionSequence("Must call DatasetBuilder.set_data_source"
+                "before using methods that use data")
+
+class InvalidConstructionSequence(Exception):
+    """Indicates that the methods of a DatasetBuilder have been called in an invalid order"""
+    def __init__(self, description):
+        super().__init__()
+        self.description = description
+
+    def __str__(self):
+        return f"invalid construction sequence: {self.description}"
