@@ -57,12 +57,16 @@ class DatasetBuilder():
         return histogram
 
     def add_stimuli(self, window_scale=1, frequency_bin_count=50,
-            min_frequency=500, max_frequency=8000):
+            min_frequency=500, max_frequency=8000, log_transform=True,
+            log_transform_compress=1):
         """
             Add a dataframe containing gammatone spectrograms for each
             stimulus associated with a trial
 
-            window_scale: ratio of gammatone window size to time_step
+            `window_scale`: ratio of gammatone window size to time_step
+            `log_transform`: whether to take the log of the power of each
+            spectrogram. If `True`, each point on the spectrogram `x` will
+            be transformed into `log(x + log_transform_compress) - log(x)`
         """
         self._dataset.window_scale = window_scale
         self._dataset.frequency_bin_count = frequency_bin_count
@@ -70,13 +74,13 @@ class DatasetBuilder():
         self._dataset.max_frequency = max_frequency
         stimuli_names = set(s for s, _ in self._dataset.responses.index)
         wav_data = self.data_source.get_stimuli()
-        spectrograms = {k: self._spectrogram(v) for k, v in wav_data.items()}
+        spectrograms = {k: self._spectrogram(v, log_transform, log_transform_compress) for k, v in wav_data.items()}
         self._dataset.stimuli = self._dataset.responses.apply(
                 lambda x: spectrograms[x.name[0]],
                 axis='columns'
         ).sort_index()
 
-    def _spectrogram(self, wav_data,log_transform = True, compress =1):
+    def _spectrogram(self, wav_data, log_transform, compress):
         sample_rate, samples = wav_data
         spectrogram = mem.cache(gtgram)(
                 samples,
@@ -88,7 +92,7 @@ class DatasetBuilder():
                 f_max=self._dataset.max_frequency
         )
         if log_transform:
-            spectrogram = np.log10(spectrogram+compress)-np.log10(compress)
+            spectrogram = np.log10(spectrogram + compress) - np.log10(compress)
         return spectrogram.T
 
     def create_time_lags(self, tau=0.300):

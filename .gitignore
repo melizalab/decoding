@@ -3,3 +3,4 @@
 *.wav
 *.egg-info/
 __pycache__/
+env/
