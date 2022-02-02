@@ -6,7 +6,7 @@ response that it induces.
 
 ## Examples
 
-Consult [decoding/_test/test_dataset.py].
+Consult [decoding/_tests/test_dataset.py].
 
 ## Documentation
 
