@@ -11,7 +11,7 @@ from scipy.linalg import hankel
 import swifter
 
 import decoding
-from decoding.io import DataSource
+from decoding.sources import DataSource
 
 _cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
 mem = Memory(_cache_dir, verbose=0)
@@ -30,7 +30,7 @@ class DatasetBuilder():
         self.min_frequency = None
 
     def set_data_source(self, data_source):
-        """ `data_source`: concrete inheritor of `decoding.io.DataSource`
+        """ `data_source`: concrete inheritor of `decoding.sources.DataSource`
         """
         self.data_source = data_source
 

@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from decoding import DatasetBuilder
-from decoding.io import MemorySource
+from decoding.sources import MemorySource
 
 stimtrial_pprox = {
             'neuron_1': {

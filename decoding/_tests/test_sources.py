@@ -1,4 +1,4 @@
-from decoding.io import NeurobankSource
+from decoding.sources import NeurobankSource
 
 async def test_neurobank():
     stimuli = ['ztqee46x',

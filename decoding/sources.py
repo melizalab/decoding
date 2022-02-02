@@ -1,4 +1,4 @@
-"""File I/O methods"""
+"""Data sources"""
 import json
 import asyncio
 import aiohttp
