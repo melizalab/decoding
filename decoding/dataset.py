@@ -8,6 +8,7 @@ from joblib import Memory
 from appdirs import user_cache_dir
 from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
+import swifter
 
 import decoding
 from decoding.io import DataSource
@@ -150,7 +151,7 @@ class DatasetBuilder():
         """
         return self._dataset.get_responses().groupby(level=1, axis='columns') \
                 .apply(lambda x: x.droplevel(1, axis='columns') \
-                    .apply(func, axis='columns')
+                    .swifter.apply(func, axis='columns')
                 )
 
 
