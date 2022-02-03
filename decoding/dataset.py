@@ -8,11 +8,12 @@ from joblib import Memory
 from appdirs import user_cache_dir
 from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
-import swifter
+from pandarallel import pandarallel
 
 import decoding
 from decoding.sources import DataSource
 
+pandarallel.initialize()
 _cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
 mem = Memory(_cache_dir, verbose=0)
 
@@ -150,8 +151,8 @@ class DatasetBuilder():
             returns (pandas.Series): the collected outputs of `func`
         """
         return self._dataset.get_responses().groupby(level=1, axis='columns') \
-                .apply(lambda x: x.droplevel(1, axis='columns') \
-                    .swifter.apply(func, axis='columns')
+                .parallel_apply(lambda x: x.droplevel(1, axis='columns') \
+                    .apply(func, axis='columns')
                 )
 
 

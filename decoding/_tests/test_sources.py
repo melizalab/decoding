@@ -1,4 +1,4 @@
-from decoding.sources import NeurobankSource
+from decoding.sources import NeurobankSource, MemorySource
 
 async def test_neurobank():
     stimuli = ['ztqee46x',
@@ -18,3 +18,12 @@ async def test_neurobank():
     source = await NeurobankSource.create(url, responses, stimuli)
     assert len(source.get_responses()) == 1
     assert len(source.get_stimuli()) == len(stimuli)
+
+def test_all_formats_equiv(stimuli, cn_pprox, ar_pprox, stimtrial_pprox):
+    cn_data = MemorySource(cn_pprox, stimuli)
+    ar_data = MemorySource(ar_pprox, stimuli)
+    stimtrial = MemorySource(stimtrial_pprox, stimuli)
+    print(stimtrial.get_responses())
+    print(ar_data.get_responses())
+    assert stimtrial == cn_data
+    assert stimtrial == ar_data
