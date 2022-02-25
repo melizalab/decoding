@@ -235,7 +235,7 @@ class MemorySource(DataSource):
         return self.stimuli
 
 def _fix_pprox(responses, durations):
-    for json_data in responses.values():
+    for name, json_data in responses.items():
         if json_data.get('$schema') == "https://meliza.org/spec:2/stimtrial.json#":
             pass
         # if the pprox does not conform to the stimtrial spec,
@@ -247,7 +247,7 @@ def _fix_pprox(responses, durations):
         elif json_data.get('protocol') in ['songs', 'chorus']:
             _cn_data_shim(json_data, durations)
         else:
-            raise UnrecognizedPproxFormat
+            raise UnrecognizedPproxFormat(name)
         for i, trial in enumerate(json_data['pprox']):
             trial['stim'] = trial['stimulus']['name']
             trial['index'] = i
@@ -256,9 +256,13 @@ def _fix_pprox(responses, durations):
 
 class UnrecognizedPproxFormat(Exception):
     """Exception raised when the needed metadata could not be found in a pprox file"""
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+
     def __str__(self):
-        return ("could not detect pprox format, try making sure"
-        "the pprox conforms to stimtrial and that '$schema' is set")
+        return (f"could not detect pprox format for file {self.name}, try making sure"
+        " the pprox conforms to stimtrial and that '$schema' is set")
 
 
 def _ar_data_shim(json_data, durations):
