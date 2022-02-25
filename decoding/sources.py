@@ -244,7 +244,7 @@ def _fix_pprox(responses, durations):
         elif json_data.get('experiment') == 'induction':
             _ar_data_shim(json_data, durations)
             _cn_data_shim(json_data, durations)
-        elif json_data.get('protocol') == 'songs':
+        elif json_data.get('protocol') in ['songs', 'chorus']:
             _cn_data_shim(json_data, durations)
         else:
             raise UnrecognizedPproxFormat
