@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
+
 class Basis(ABC):
     @abstractmethod
     def __init__(self, num_basis_functions):
@@ -13,9 +14,10 @@ class Basis(ABC):
         (num_timesteps, num_basis_functions)
         """
 
+
 class RaisedCosineBasis(Basis):
-    """Make a nonlinearly stretched basis consisting of raised cosines
-    """
+    """Make a nonlinearly stretched basis consisting of raised cosines"""
+
     MIN_OFFSET = 1e-20
 
     def __init__(self, num_basis_functions, linearity_factor=10):
@@ -45,7 +47,7 @@ class RaisedCosineBasis(Basis):
         log_domain = nonlinearity(np.flip(np.arange(num_timesteps)))
         peak_spacing = (last_peak - first_peak) / (self.num_basis_functions - 1)
         basis = np.column_stack(
-                [self.raised_cos(c, log_domain, peak_spacing) for c in peak_centers]
+            [self.raised_cos(c, log_domain, peak_spacing) for c in peak_centers]
         )
         basis /= np.linalg.norm(basis, axis=0)
         return basis
