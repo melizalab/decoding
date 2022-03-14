@@ -20,6 +20,9 @@ Pprox = Dict[str, Any]
 class DataSource(ABC):
     """Abstract class for data sources to inherit from
 
+    The methods on this class will be available from all the child classes
+    in the module, but you cannot directly instantiate this class.
+
     Concrete child implementations must define how to load data (e.g. local path, URL).
     By inheriting from this class, they provide a standardized interface to
     access the data
@@ -157,24 +160,25 @@ class NeurobankSource(FsSource):
     way:
     ```
     >>> import asyncio
+    >>> from decoding.sources import NeurobankSource
     >>> stimuli = ['ztqee46x', '00oagdl5', 'g29wxi4q', 'mrel2o09', 'vekibwgj', \
         'l1a3ltpy', 'igmi8fxa', 'c95zqjxq', 'w08e1crn', 'jkexyrd5', 'p1mrfhop', ]
     >>> responses = ['P120_1_1_c92']
     >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
-    >>> data_source = asyncio.run(NeurobankSource.create(url, responses, stimuli))
+    >>> data_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
 
     ```
 
     In a Jupyter Notebook, you can skip importing `asyncio` and just run:
     ```
-    data_source = NeurobankSource.create(url, responses, stimuli)
+    data_source = await NeurobankSource.create(url, stimuli, responses)
     ```
     """
 
     _DOWNLOAD_FORMAT = "resources/{}/download"
 
     @classmethod
-    async def create(cls, neurobank_registry: str, pprox_ids, wav_ids):
+    async def create(cls, neurobank_registry: str, wav_ids, pprox_ids):
         """
         `neurobank_registry`: URL of Neurobank instance
 

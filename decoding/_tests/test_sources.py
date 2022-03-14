@@ -17,7 +17,7 @@ async def test_neurobank():
     ]
     responses = ["P120_1_1_c92"]
     url = "https://gracula.psyc.virginia.edu/neurobank/"
-    source = await NeurobankSource.create(url, responses, stimuli)
+    source = await NeurobankSource.create(url, stimuli, responses)
     assert len(source.get_responses()) == 1
     assert len(source.get_stimuli()) == len(stimuli)
 

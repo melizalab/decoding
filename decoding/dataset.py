@@ -49,8 +49,8 @@ class DatasetBuilder:
 
     def bin_responses(self, time_step=0.005):
         """
-        transform a time series into bins of size `time_step` containinng
-        the number of spikes that occurred within that time bin.
+        transform a point process into bins of size `time_step` containinng
+        the number of events that occurred within that time bin.
         """
         self._dataset.time_step = time_step
         self._dataset.responses["events"] = self.responses_apply(self._hist)
