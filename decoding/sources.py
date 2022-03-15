@@ -1,16 +1,20 @@
 """Data sources"""
-import json
-import numpy as np
 import asyncio
+from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Optional, Generator, Union
-import aiohttp
-from glob import glob
-import parse
-from scipy.io import wavfile
-from urllib.parse import urljoin, urlparse
-from appdirs import user_cache_dir
 from abc import ABC, abstractmethod
 from pathlib import Path
+from glob import glob
+import json
+from urllib.parse import urljoin, urlparse
+
+import numpy as np
+import aiohttp
+import parse
+from scipy.io import wavfile
+from appdirs import user_cache_dir
+
+
 from decoding import APP_NAME, APP_AUTHOR
 from . import dataset
 
@@ -57,7 +61,9 @@ class DataSource(ABC):
 
 
     def _stimuli_generator(self) -> Generator[str, None, None]:
-        for pprox in self.get_responses().values():
+        durations = defaultdict(lambda: 0.0)
+        responses = _fix_pprox(self._get_raw_responses(), durations)
+        for pprox in responses.values():
             for trial in pprox['pprox']:
                 yield trial['stimulus']['name']
 

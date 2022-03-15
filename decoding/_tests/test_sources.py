@@ -40,5 +40,5 @@ def test_all_formats_equiv(stimuli, cn_pprox, ar_pprox, stimtrial_pprox):
     assert stimtrial == ar_data
 
 async def test_show_stimuli(nbank_responses, nbank_stimuli, nbank_url):
-    source = await NeurobankSource.create(nbank_url, nbank_stimuli, nbank_responses)
+    source = await NeurobankSource.create(nbank_url, [], nbank_responses)
     assert source.show_stimuli() == set(nbank_stimuli)
