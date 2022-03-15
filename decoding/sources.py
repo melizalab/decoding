@@ -2,7 +2,7 @@
 import json
 import numpy as np
 import asyncio
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, Generator, Union
 import aiohttp
 from glob import glob
 import parse
@@ -51,14 +51,24 @@ class DataSource(ABC):
             self.get_stimuli() == other.get_stimuli()
         )
 
+    def show_stimuli(self) -> set[str]:
+        """returns a set of all stimuli used in the responses"""
+        return set(self._stimuli_generator())
+
+
+    def _stimuli_generator(self) -> Generator[str, None, None]:
+        for pprox in self.get_responses().values():
+            for trial in pprox['pprox']:
+                yield trial['stimulus']['name']
+
 
 class FsSource(DataSource):
     """Loads data from local File System"""
 
     def __init__(
         self,
-        pprox_path_format: str,
-        wav_path_format: str,
+        pprox_path_format: Union[str, Path],
+        wav_path_format: Union[str, Path],
         stimuli_names: Optional[List[str]] = None,
         cluster_list: Optional[List[str]] = None,
     ):
@@ -185,12 +195,12 @@ class NeurobankSource(FsSource):
         both `pprox_ids` and `wav_ids` may either be a
         list of resource IDs, or path to a file containing such a list
         """
-        self = NeurobankSource()
-        self.url_format = urljoin(neurobank_registry, self._DOWNLOAD_FORMAT)
-        self.pprox_ids = self._get_list(pprox_ids)
-        self.wav_ids = self._get_list(wav_ids)
+        url_format = urljoin(neurobank_registry, cls._DOWNLOAD_FORMAT)
+        pprox_ids = cls._get_list(pprox_ids)
+        wav_ids = cls._get_list(wav_ids)
         parsed_url = urlparse(neurobank_registry)
-        self.cache_dir = Path(user_cache_dir(APP_NAME, APP_AUTHOR)) / parsed_url.netloc
+        cache_dir = Path(user_cache_dir(APP_NAME, APP_AUTHOR)) / parsed_url.netloc
+        self = NeurobankSource(url_format, pprox_ids, wav_ids, cache_dir)
         responses_dir = self.cache_dir / "responses"
         stimuli_dir = self.cache_dir / "stimuli"
         responses_dir.mkdir(parents=True, exist_ok=True)
@@ -205,8 +215,13 @@ class NeurobankSource(FsSource):
         )
         return self
 
-    def __init__(self):
-        """`NeurobankSource` cannot be directly initialized. Use `NeurobankSource.create` instead."""
+    def __init__(self, url_format, pprox_ids, wav_ids, cache_dir):
+        """`NeurobankSource` cannot be directly initialized.
+        Use `NeurobankSource.create` instead."""
+        self.url_format = url_format
+        self.pprox_ids = pprox_ids
+        self.wav_ids = wav_ids
+        self.cache_dir = cache_dir
 
     @staticmethod
     def _get_list(resource_ids):

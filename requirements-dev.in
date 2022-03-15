@@ -1,2 +1,4 @@
+pdoc
+pyright
 pytest
 pytest-asyncio

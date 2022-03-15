@@ -1,10 +1,10 @@
+import pytest
 from decoding.sources import NeurobankSource, MemorySource
 
-
-async def test_neurobank():
-    stimuli = [
+@pytest.fixture
+def nbank_stimuli():
+    return [
         "ztqee46x",
-        "00oagdl5",
         "g29wxi4q",
         "mrel2o09",
         "vekibwgj",
@@ -15,11 +15,19 @@ async def test_neurobank():
         "jkexyrd5",
         "p1mrfhop",
     ]
-    responses = ["P120_1_1_c92"]
-    url = "https://gracula.psyc.virginia.edu/neurobank/"
-    source = await NeurobankSource.create(url, stimuli, responses)
+
+@pytest.fixture
+def nbank_responses():
+    return ["P120_1_1_c92"]
+
+@pytest.fixture
+def nbank_url():
+    return "https://gracula.psyc.virginia.edu/neurobank/"
+
+async def test_neurobank(nbank_responses, nbank_stimuli, nbank_url):
+    source = await NeurobankSource.create(nbank_url, nbank_stimuli, nbank_responses)
     assert len(source.get_responses()) == 1
-    assert len(source.get_stimuli()) == len(stimuli)
+    assert len(source.get_stimuli()) == len(nbank_stimuli)
 
 
 def test_all_formats_equiv(stimuli, cn_pprox, ar_pprox, stimtrial_pprox):
@@ -30,3 +38,7 @@ def test_all_formats_equiv(stimuli, cn_pprox, ar_pprox, stimtrial_pprox):
     print(ar_data.get_responses())
     assert stimtrial == cn_data
     assert stimtrial == ar_data
+
+async def test_show_stimuli(nbank_responses, nbank_stimuli, nbank_url):
+    source = await NeurobankSource.create(nbank_url, nbank_stimuli, nbank_responses)
+    assert source.show_stimuli() == set(nbank_stimuli)

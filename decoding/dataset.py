@@ -80,13 +80,22 @@ class DatasetBuilder:
         spectrogram. If `True`, each point on the spectrogram `x` will
         be transformed into `log(x + log_transform_compress) - log(x)`
         """
-        self.window_scale = window_scale
-        self.frequency_bin_count = frequency_bin_count
-        self.min_frequency = min_frequency
-        self.max_frequency = max_frequency
+        gammatone_params = {
+                'window_time': self._dataset.get_time_step() * window_scale,
+                'hop_time': self._dataset.get_time_step(),
+                'channels': frequency_bin_count,
+                'f_min': min_frequency,
+                'f_max': max_frequency,
+        }
+        if log_transform:
+            log_transform_params = {
+                    'compress': log_transform_compress,
+            }
+        else:
+            log_transform_params = None
         wav_data = self.data_source.get_stimuli()
         spectrograms = {
-            k: self._spectrogram(v, log_transform, log_transform_compress)
+            k: self._spectrogram(v, log_transform_params, gammatone_params)
             for k, v in wav_data.items()
         }
         self._dataset.stimuli = (
@@ -95,18 +104,16 @@ class DatasetBuilder:
             .sort_index()
         )
 
-    def _spectrogram(self, wav_data, log_transform, compress):
+    @staticmethod
+    def _spectrogram(wav_data, log_transform_params, gammatone_params):
         sample_rate, samples = wav_data
         spectrogram = mem.cache(gtgram)(
             samples,
             sample_rate,
-            window_time=self._dataset.get_time_step() * self.window_scale,
-            hop_time=self._dataset.get_time_step(),
-            channels=self.frequency_bin_count,
-            f_min=self.min_frequency,
-            f_max=self.max_frequency,
+            **gammatone_params
         )
-        if log_transform:
+        if log_transform_params is not None:
+            compress = log_transform_params['compress']
             spectrogram = np.log10(spectrogram + compress) - np.log10(compress)
         return spectrogram.T
 
@@ -201,6 +208,9 @@ class Dataset:
         if self.stimuli is None:
             raise InvalidConstructionSequence("must call `add_stimuli` first")
         return self.stimuli
+
+    def _set_time_step(self, time_step: float):
+        self.time_step = time_step
 
     def get_time_step(self):
         if self.time_step is None:
