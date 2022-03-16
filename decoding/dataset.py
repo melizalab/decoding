@@ -1,4 +1,96 @@
 """Loading data for neural decoding
+
+## Examples
+
+Let's build a simple dataset for neural decoding. The first step is determining
+what data we'll use. Depending on where our data is stored we'll use different
+classes that inherit from decoding.sources.DataSource. For example, if we want to
+use data from a local folder on our computer we might use decoding.sources.FsSource.
+For other options, see decoding.sources. In this example, we'll use
+decoding.sources.NeurobankSource, which will automatically download a list of
+identifiers from Neurobank. Let's suppose we know we want to use a pprox responses
+file with identifier `P120_1_1_c92`.
+>>> from decoding.sources import NeurobankSource
+>>> import asyncio
+>>> responses = ['P120_1_1_c92']
+>>> stimuli = [] # we'll leave this empty for now
+>>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
+>>> test_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
+
+We can't use this `DataSource` to build a dataset because it doesn't contain any
+of the stimuli that were presented during the recording, but we can easily get
+a list of the stimuli identifiers:
+>>> stimuli = list(test_source.show_stimuli())
+>>> sorted(stimuli)
+['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09', \
+'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
+
+Let's make a new DataSource that includes the stimuli
+>>> data_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
+
+Now we can start building our dataset. We will put our data into a
+`DatasetBuilder`, which will allow us to configure the format of our dataset.
+>>> from decoding.dataset import DatasetBuilder
+>>> builder = DatasetBuilder()
+>>> builder.set_data_source(data_source)
+>>> builder.load_responses()
+
+The first choice we have to make is the size of our time steps. This will
+determine the granularity of the time axis for both the spikes and the stimuli.
+The unit for this argument and all other time values will be seconds.
+>>> builder.bin_responses(time_step=0.005) # 5 ms
+
+Next, we load the stimuli. We must choose parameters to control how the gammatone
+spectrograms are generated. Consult DatasetBuilder.add_stimuli for details on each
+argument.
+>>> builder.add_stimuli(
+...     window_scale=1,
+...     frequency_bin_count=50,
+...     min_frequency=500,
+...     max_frequency=8000,
+...     log_transform=True,
+...     log_transform_compress=1,
+... )
+
+Now we will convert the binned spikes into a lagged matrix, with a with a window
+of size tau.
+>>> builder.create_time_lags(tau=0.3)
+
+Our next step is to combine data from multiple presentations of the same stimulus.
+(This is optional.)
+>>> builder.pool_trials()
+
+We have finished building our dataset.
+We should investigate our object a bit, to make sure we understand how
+it's structured.
+>>> dataset = builder.get_dataset()
+
+>>> dataset.index
+Index(['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09',
+       'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x'],
+      dtype='object', name='stim')
+>>> dataset.responses.columns
+MultiIndex([(  'offset', 'P120_1_1_c92'),
+            ('interval', 'P120_1_1_c92'),
+            ('stimulus', 'P120_1_1_c92'),
+            (  'events', 'P120_1_1_c92')],
+           )
+
+Let's use our dataset to perform a simple neural decoding task
+
+>>> from sklearn.linear_model import Ridge
+>>> import numpy as np
+>>> training_stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09']
+>>> X, Y = dataset[training_stimuli]
+>>> X.shape, Y.shape
+((2476, 60, 1), (2476, 50))
+>>> X = np.resize(X, (X.shape[0], X.shape[1] * X.shape[2]))
+>>> model = Ridge(alpha=1.0)
+>>> model.fit(X, Y)
+Ridge()
+>>> model.score(X, Y)
+0.1903559601102622
+
 """
 import numpy as np
 import pandas as pd
@@ -26,12 +118,8 @@ class DatasetBuilder:
         self.data_source = _EmptySource()
         self.tau = None
         self.basis = None
-        self.window_scale = None
-        self.max_frequency = None
-        self.min_frequency = None
 
-    def set_data_source(self, data_source):
-        """`data_source`: concrete inheritor of `decoding.sources.DataSource`"""
+    def set_data_source(self, data_source: DataSource):
         self.data_source = data_source
 
     def load_responses(self):
@@ -53,7 +141,7 @@ class DatasetBuilder:
         the number of events that occurred within that time bin.
         """
         self._dataset.time_step = time_step
-        self._dataset.responses["events"] = self.responses_apply(self._hist)
+        self._dataset.get_responses()["events"] = self.responses_apply(self._hist)
 
     def _hist(self, row):
         duration = np.max(row["events"]) if len(row["events"]) else 0
@@ -127,7 +215,7 @@ class DatasetBuilder:
 
         self.tau = tau
         self.basis = basis
-        self._dataset.responses["events"] = self.responses_apply(self._stagger)
+        self._dataset.get_responses()["events"] = self.responses_apply(self._stagger)
 
     def _stagger(self, row):
         start = self._dataset.to_steps(row["stimulus"]["interval"][0])
@@ -147,10 +235,13 @@ class DatasetBuilder:
 
     def pool_trials(self):
         """Pool spikes across trials"""
+        neurons = self._dataset.get_responses()['events'].columns
         events = pd.concat(
-            {"events": self._dataset.get_responses()["events"].groupby("stim").sum()},
+                {"events": self._dataset.get_responses()["events"].groupby("stim").agg({n: 'sum' for n in neurons})},
             axis="columns",
         )
+        # we assume that all fields except for events are the same across trials
+        # because we don't have a way to aggregate other datatypes
         self._dataset.responses = (
             self._dataset.get_responses()
             .groupby("stim")

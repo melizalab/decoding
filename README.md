@@ -6,11 +6,15 @@ response that it induces.
 
 To create the dataset, you must create a `decoding.sources.DataSource` and pass it a `decoding.dataset.DatasetBuilder` and configure your dataset.
 
+## Examples
+
+See `decoding.dataset`.
+
 ## Documentation
 
 To view documentation, run the following code:
 ```
-pip install pdoc
+pip install -r requirements-dev.txt
 pdoc decoding
 ```
 
@@ -24,4 +28,5 @@ Run tests:
 
 ```bash
 pytest
+pyright
 ```

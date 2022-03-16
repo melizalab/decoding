@@ -69,7 +69,7 @@ class DataSource(ABC):
 
 
 class FsSource(DataSource):
-    """Loads data from local File System"""
+    """Loads data from local File System (FS) """
 
     def __init__(
         self,

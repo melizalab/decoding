@@ -25,3 +25,14 @@ def test_building(mem_data_source):
     builder.add_stimuli()
     builder.create_time_lags()
     dataset = builder.get_dataset()
+
+#@pytest.mark.skip(reason="not sure how to test this")
+def test_pool_trials(mem_data_source):
+    builder = DatasetBuilder()
+    builder.set_data_source(mem_data_source)
+    builder.load_responses()
+    builder.bin_responses()
+    builder.add_stimuli()
+    builder.create_time_lags()
+    builder.pool_trials()
+    assert 'events' in builder._dataset.get_responses().columns
