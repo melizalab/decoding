@@ -20,7 +20,7 @@ file with identifier `P120_1_1_c92`.
 We can't use this `DataSource` to build a dataset because it doesn't contain any
 of the stimuli that were presented during the recording, but we can easily get
 a list of the stimuli identifiers:
->>> stimuli = list(test_source.show_stimuli())
+>>> stimuli = list(test_source.stimuli_names_from_pprox())
 >>> sorted(stimuli)
 ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09', \
 'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
@@ -92,6 +92,8 @@ Ridge()
 0.1903559601102622
 
 """
+from typing import Optional, Callable, Any
+
 import numpy as np
 import pandas as pd
 from joblib import Memory
@@ -102,6 +104,7 @@ from pandarallel import pandarallel
 
 import decoding
 from decoding.sources import DataSource
+from decoding.basisfunctions import Basis
 
 pandarallel.initialize()
 _cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
@@ -112,12 +115,13 @@ class DatasetBuilder:
     """Construct instances of the `Dataset` class using the [builder
     pattern](https://refactoring.guru/design-patterns/builder)
     """
+    data_source: DataSource
+    tau: Optional[float]
+    basis: Optional[Basis]
 
     def __init__(self):
         self._dataset = Dataset()
         self.data_source = _EmptySource()
-        self.tau = None
-        self.basis = None
 
     def set_data_source(self, data_source: DataSource):
         self.data_source = data_source
@@ -135,7 +139,7 @@ class DatasetBuilder:
         responses.columns = responses.columns.reorder_levels(order=[1, 0])
         self._dataset.responses = responses
 
-    def bin_responses(self, time_step=0.005):
+    def bin_responses(self, time_step : float = 0.005):
         """
         transform a point process into bins of size `time_step` containinng
         the number of events that occurred within that time bin.
@@ -143,7 +147,7 @@ class DatasetBuilder:
         self._dataset.time_step = time_step
         self._dataset.get_responses()["events"] = self.responses_apply(self._hist)
 
-    def _hist(self, row):
+    def _hist(self, row) -> np.ndarray:
         duration = np.max(row["events"]) if len(row["events"]) else 0
         # we ignore `duration % time_step` at the end
         bin_edges = np.arange(0, duration, self._dataset.get_time_step())
@@ -205,12 +209,41 @@ class DatasetBuilder:
             spectrogram = np.log10(spectrogram + compress) - np.log10(compress)
         return spectrogram.T
 
-    def create_time_lags(self, tau=0.300, basis=None):
+    def create_time_lags(self, tau : float = 0.300, basis: Optional[Basis] = None):
         """
         `tau`: length of window (in secs) to consider in prediction
         `basis`: an instance of a class that inherits from
         `decoding.basisfunctions.Basis`, initialized with the dimension
         of the projection
+
+        ## example
+        <!--
+        >>> import asyncio
+        >>> from decoding.sources import NeurobankSource
+        >>> responses = ['P120_1_1_c92']
+        >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
+        >>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
+        ...         'mrel2o09', 'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
+        >>> data_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
+        >>> builder = DatasetBuilder()
+        >>> builder.set_data_source(data_source)
+        >>> builder.load_responses()
+        >>> builder.bin_responses(time_step=0.005) # 5 ms
+        >>> builder.add_stimuli(
+        ...     window_scale=1,
+        ...     frequency_bin_count=50,
+        ...     min_frequency=500,
+        ...     max_frequency=8000,
+        ...     log_transform=True,
+        ...     log_transform_compress=1,
+        ... )
+
+
+        -->
+        >>> from decoding.basisfunctions import RaisedCosineBasis
+        >>> builder.create_time_lags(tau=0.3, basis=RaisedCosineBasis(30))
+
+
         """
 
         self.tau = tau
@@ -251,7 +284,7 @@ class DatasetBuilder:
         )
         self._dataset.stimuli = self._dataset.get_stimuli().groupby("stim").first()
 
-    def responses_apply(self, func):
+    def responses_apply(self, func: Callable[[pd.DataFrame], Any]):
         """
         Responses has a complex structure; this function provides a
         simple way to apply a function to each row
@@ -281,35 +314,28 @@ class DatasetBuilder:
 
 class Dataset:
     """Holds constructed response matrix and stimuli
-
-    ### Example usage
-    ```
-    dataset = dataset_builder.get_dataset()
-    X, Y = dataset[:]
-    ```
     """
+    responses: Optional[pd.DataFrame]
+    """"""
+    stimuli: Optional[pd.DataFrame]
+    """"""
+    time_step: Optional[float]
+    """granularity of time"""
+    index: Optional[pd.Index]
+    """"""
 
     def __init__(self):
-        self.responses = None
-        self.stimuli = None
-        self.time_step = None
-        self.index = None
+        pass
 
     def get_stimuli(self) -> pd.DataFrame:
         if self.stimuli is None:
             raise InvalidConstructionSequence("must call `add_stimuli` first")
         return self.stimuli
 
-    def _set_time_step(self, time_step: float):
-        self.time_step = time_step
-
-    def get_time_step(self):
+    def get_time_step(self) -> float:
         if self.time_step is None:
             raise InvalidConstructionSequence("must call `bin_responses` first")
         return self.time_step
-
-    def _set_responses(self, responses: pd.DataFrame):
-        self.responses = responses
 
     def get_responses(self) -> pd.DataFrame:
         if self.responses is None:

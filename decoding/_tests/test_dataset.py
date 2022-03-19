@@ -26,7 +26,6 @@ def test_building(mem_data_source):
     builder.create_time_lags()
     dataset = builder.get_dataset()
 
-#@pytest.mark.skip(reason="not sure how to test this")
 def test_pool_trials(mem_data_source):
     builder = DatasetBuilder()
     builder.set_data_source(mem_data_source)

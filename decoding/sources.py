@@ -1,7 +1,44 @@
-"""Data sources"""
+"""Data sources
+
+## Examples
+
+Let's build a simple application that accepts input in the form of a DataSource.
+
+>>> import numpy as np
+>>> from decoding.sources import DataSource, MemorySource
+>>> def stim_resp_summary(data_source: DataSource):
+...     stimuli = data_source.get_stimuli()
+...     print('stimuli sample rates:')
+...     for name, (fs, _samples) in stimuli.items():
+...         print(f'{name}: {fs}')
+...     responses = data_source.get_responses()
+...     print('responses trial count:')
+...     for name, pprox in responses.items():
+...         print(f'{name}: {len(pprox["pprox"])}')
+
+>>> responses = ['P120_1_1_c92']
+>>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
+>>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
+...         'mrel2o09', 'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
+>>> data_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
+>>> stim_resp_summary(data_source)
+stimuli sample rates:
+c95zqjxq: 44100
+g29wxi4q: 44100
+igmi8fxa: 44100
+jkexyrd5: 44100
+l1a3ltpy: 44100
+mrel2o09: 44100
+p1mrfhop: 44100
+vekibwgj: 44100
+w08e1crn: 44100
+ztqee46x: 44100
+responses trial count:
+P120_1_1_c92: 100
+"""
 import asyncio
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Optional, Generator, Union
+from typing import Any, Dict, List, Tuple, Optional, Generator, Union, TypedDict
 from abc import ABC, abstractmethod
 from pathlib import Path
 from glob import glob
@@ -18,7 +55,23 @@ from appdirs import user_cache_dir
 from decoding import APP_NAME, APP_AUTHOR
 from . import dataset
 
-Pprox = Dict[str, Any]
+class StimConfig(TypedDict):
+    """type annotation for information about a stimulus presentation"""
+    name: str
+    interval: List[float]
+
+class Trial(TypedDict):
+    """type annotation for a trial"""
+    events: List[float]
+    interval: List[float]
+    stimulus: StimConfig
+    offset: Optional[float]
+    stim: Optional[str]
+    index: Optional[int]
+
+class Pprox(TypedDict):
+    """type annotation for a collection of trials"""
+    pprox: List[Trial]
 
 
 class DataSource(ABC):
@@ -55,7 +108,7 @@ class DataSource(ABC):
             self.get_stimuli() == other.get_stimuli()
         )
 
-    def show_stimuli(self) -> set[str]:
+    def stimuli_names_from_pprox(self) -> set[str]:
         """returns a set of all stimuli used in the responses"""
         return set(self._stimuli_generator())
 
@@ -270,7 +323,7 @@ class MemorySource(DataSource):
         return self.stimuli
 
 
-def _fix_pprox(responses: Pprox, durations: Dict[str, float]):
+def _fix_pprox(responses: Dict[str, Pprox], durations: Dict[str, float]):
     for name, json_data in responses.items():
         if json_data.get("$schema") == "https://meliza.org/spec:2/stimtrial.json#":
             pass
