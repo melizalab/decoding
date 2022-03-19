@@ -1,0 +1,24 @@
+name: pdoc
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: install dependencies
+        run: |
+          python -m pip install ghp-import
+          python -m pip install -r requirements-dev.txt
+      - name: build docs
+        run: |
+          pdoc decoding -o docs
+      - name: push docs
+        run: |
+          ghp-import -nfop docs
