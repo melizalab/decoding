@@ -38,7 +38,8 @@ P120_1_1_c92: 100
 """
 import asyncio
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Optional, Generator, Union, TypedDict
+from typing import Dict, List, Tuple, Optional, Generator, Union, \
+        TypedDict, Set
 from abc import ABC, abstractmethod
 from pathlib import Path
 from glob import glob
@@ -108,7 +109,7 @@ class DataSource(ABC):
             self.get_stimuli() == other.get_stimuli()
         )
 
-    def stimuli_names_from_pprox(self) -> set[str]:
+    def stimuli_names_from_pprox(self) -> Set[str]:
         """returns a set of all stimuli used in the responses"""
         return set(self._stimuli_generator())
 
