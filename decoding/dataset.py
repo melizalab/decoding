@@ -81,6 +81,7 @@ Let's use our dataset to perform a simple neural decoding task
 >>> from sklearn.linear_model import Ridge
 >>> import numpy as np
 >>> training_stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09']
+>>> test_stimuli = set(dataset.index).difference(training_stimuli)
 >>> X, Y = dataset[training_stimuli]
 >>> X.shape, Y.shape
 ((2476, 60, 1), (2476, 50))
@@ -90,6 +91,10 @@ Let's use our dataset to perform a simple neural decoding task
 Ridge()
 >>> model.score(X, Y)
 0.19035596
+>>> X_test, Y_test = dataset[test_stimuli]
+>>> X_test = np.resize(X_test, (X_test.shape[0], X_test.shape[1] * X_test.shape[2]))
+>>> model.score(X_test, Y_test)
+0.1350506
 
 """
 from typing import Optional, Callable, Any
