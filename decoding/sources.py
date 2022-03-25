@@ -200,7 +200,13 @@ class FsSource(DataSource):
         clusters = {}
         for name, path in FsSource._get_filenames(path_format, cluster_names):
             with open(path, "r") as pprox_file:
-                json_data = json.load(pprox_file)
+                try:
+                    json_data = json.load(pprox_file)
+                except UnicodeDecodeError as exc:
+                    raise ValueError(
+                            "could not load pprox files as text data"
+                            " (are you putting stimuli where responses should go?)"
+                    ) from exc
                 clusters[name] = json_data
         return clusters
 

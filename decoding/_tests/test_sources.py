@@ -42,3 +42,8 @@ def test_all_formats_equiv(stimuli, cn_pprox, ar_pprox, stimtrial_pprox):
 async def test_show_stimuli(nbank_responses, nbank_stimuli, nbank_url):
     source = await NeurobankSource.create(nbank_url, [], nbank_responses)
     assert source.stimuli_names_from_pprox() == set(nbank_stimuli)
+
+async def test_bad_order(nbank_responses, nbank_stimuli, nbank_url):
+    source = await NeurobankSource.create(nbank_url, nbank_responses, nbank_stimuli)
+    with pytest.raises(ValueError):
+        source.get_responses()
