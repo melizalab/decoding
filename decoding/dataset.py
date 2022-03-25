@@ -89,7 +89,7 @@ Let's use our dataset to perform a simple neural decoding task
 >>> model.fit(X, Y)
 Ridge()
 >>> model.score(X, Y)
-0.1903559601102622
+0.19035596
 
 """
 from typing import Optional, Callable, Any

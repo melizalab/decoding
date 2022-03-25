@@ -1,8 +1,5 @@
 """Basis functions for projecting binned spikes.
 
-NB: The assumption is that these matrices will be applied to hankel matrices,
-with lag decreasing across columns.
-
 """
 from abc import ABC, abstractmethod
 import numpy as np
@@ -17,6 +14,12 @@ class Basis(ABC):
     def get_basis(self, num_timesteps):
         """Returns a ndarray with shape
         (num_timesteps, num_basis_functions)
+
+        NB: The assumption is that this matrix will be applied to hankel
+        matrices, with lag decreasing across columns.
+
+        basis vectors must have short lags at the top,
+        matching the way the Hankel matrix is constructed
         """
 
 
@@ -24,7 +27,7 @@ class RaisedCosineBasis(Basis):
     """Make a nonlinearly stretched basis consisting of raised cosines.
     """
 
-    MIN_OFFSET = 1e-20
+    _MIN_OFFSET = 1e-20
 
     def __init__(self, num_basis_functions, linearity_factor=10):
         """
@@ -45,18 +48,15 @@ class RaisedCosineBasis(Basis):
 
     def get_basis(self, num_timesteps):
         # nonlinearity for stretching x axis
-        nonlinearity = lambda x: np.log(x + self.linearity_factor + self.MIN_OFFSET)
+        nonlinearity = lambda x: np.log(x + self.linearity_factor + self._MIN_OFFSET)
 
         first_peak = nonlinearity(0)
         last_peak = nonlinearity(num_timesteps * (1 - 1.5 / self.num_basis_functions))
         peak_centers = np.linspace(first_peak, last_peak, self.num_basis_functions)
-        log_domain = nonlinearity(np.flip(np.arange(num_timesteps)))
+        log_domain = nonlinearity(np.arange(num_timesteps))
         peak_spacing = (last_peak - first_peak) / (self.num_basis_functions - 1)
         basis = np.column_stack(
             [self.raised_cos(c, log_domain, peak_spacing) for c in peak_centers]
         )
         basis /= np.linalg.norm(basis, axis=0)
-        # basis vectors need to be flipped so that short lags are at the top,
-        # matching the way the Hankel matrix is constructed (with short lags to
-        # the
-        return np.flipud(basis)
+        return basis
