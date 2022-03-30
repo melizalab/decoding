@@ -67,7 +67,6 @@ class Trial(TypedDict):
     interval: List[float]
     stimulus: StimConfig
     offset: Optional[float]
-    stim: Optional[str]
     index: Optional[int]
 
 class Pprox(TypedDict):
@@ -345,7 +344,6 @@ def _fix_pprox(responses: Dict[str, Pprox], durations: Dict[str, float]):
         else:
             raise UnrecognizedPproxFormat(name)
         for i, trial in enumerate(json_data["pprox"]):
-            trial["stim"] = trial["stimulus"]["name"]
             trial["index"] = i
     return responses
 
@@ -393,9 +391,10 @@ def _cn_data_shim(json_data, durations):
     json_data["$schema"] = "https://meliza.org/spec:2/stimtrial.json#"
     del json_data["protocol"]
     for trial in json_data["pprox"]:
+        offset = trial.get("offset") or 0
         trial["interval"] = [
-            trial["recording"]["start"] / sampling_rate,
-            trial["recording"]["stop"] / sampling_rate,
+            (trial["recording"]["start"] / sampling_rate) - offset,
+            (trial["recording"]["stop"] / sampling_rate) - offset,
         ]
         del trial["recording"]
         stim_off = durations[trial["stim"]]

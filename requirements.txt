@@ -18,8 +18,6 @@ charset-normalizer==2.0.12
     # via aiohttp
 cycler==0.10.0
     # via matplotlib
-dill==0.3.4
-    # via pandarallel
 frozenlist==1.3.0
     # via
     #   aiohttp
@@ -49,8 +47,6 @@ numpy==1.21.1
     #   matplotlib
     #   pandas
     #   scipy
-pandarallel==1.5.5
-    # via decoding (setup.cfg)
 pandas==1.3.1
     # via decoding (setup.cfg)
 parse==1.19.0

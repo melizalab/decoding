@@ -65,23 +65,19 @@ We should investigate our object a bit, to make sure we understand how
 it's structured.
 >>> dataset = builder.get_dataset()
 
->>> dataset.index
+>>> dataset.responses.index
 Index(['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09',
        'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x'],
-      dtype='object', name='stim')
+      dtype='object', name='stimulus.name')
 >>> dataset.responses.columns
-MultiIndex([(  'offset', 'P120_1_1_c92'),
-            ('interval', 'P120_1_1_c92'),
-            ('stimulus', 'P120_1_1_c92'),
-            (  'events', 'P120_1_1_c92')],
-           )
+Index(['P120_1_1_c92'], dtype='object')
 
 Let's use our dataset to perform a simple neural decoding task
 
 >>> from sklearn.linear_model import Ridge
 >>> import numpy as np
 >>> training_stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09']
->>> test_stimuli = set(dataset.index).difference(training_stimuli)
+>>> test_stimuli = set(dataset.responses.index).difference(training_stimuli)
 >>> X, Y = dataset[training_stimuli]
 >>> X.shape, Y.shape
 ((2476, 60, 1), (2476, 50))
@@ -97,7 +93,7 @@ Ridge()
 0.1350506
 
 """
-from typing import Optional, Callable, Any
+from typing import Collection, Optional, Callable, Any, Iterable, Tuple
 
 import numpy as np
 import pandas as pd
@@ -105,13 +101,11 @@ from joblib import Memory
 from appdirs import user_cache_dir
 from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
-from pandarallel import pandarallel
 
 import decoding
 from decoding.sources import DataSource
 from decoding.basisfunctions import Basis
 
-pandarallel.initialize()
 _cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
 mem = Memory(_cache_dir, verbose=0)
 
@@ -120,6 +114,7 @@ class DatasetBuilder:
     """Construct instances of the `Dataset` class using the [builder
     pattern](https://refactoring.guru/design-patterns/builder)
     """
+
     data_source: DataSource
     tau: Optional[float]
     basis: Optional[Basis]
@@ -134,28 +129,53 @@ class DatasetBuilder:
     def load_responses(self):
         clusters = self.data_source.get_responses()
         assert len(clusters) > 0, "no clusters"
-        responses = pd.concat(
+        trial_data = pd.concat(
             {
-                k: pd.DataFrame(v["pprox"]).set_index(["stim", "index"])
+                k: pd.json_normalize(v["pprox"]).set_index("index")
                 for k, v in clusters.items()
             },
-            axis="columns",
+            axis=1,
         )
-        responses.columns = responses.columns.reorder_levels(order=[1, 0])
-        self._dataset.responses = responses
+        trial_data.columns = trial_data.columns.reorder_levels(order=[1, 0])
+        self._dataset.responses = trial_data["events"]
+        del trial_data["events"]
+        single_trial = self._aggregate_trials(trial_data)
+        assert single_trial is not None
+        _, trial_data = single_trial
+        self._dataset.trial_data = trial_data
 
-    def bin_responses(self, time_step : float = 0.005):
+    @staticmethod
+    def _aggregate_trials(trial_data: pd.DataFrame) -> Optional[Tuple[str, pd.DataFrame]]:
+        """if all trials contain the same data, return one trial
+        otherwise, raise a IncompatibleTrialError
+        """
+        trials = trial_data.groupby(axis=1, level=1)
+        first = None
+        for name, t in trials:
+            t = t.droplevel(axis=1, level=1)
+            if first == None:
+                first = (name, t)
+            first_name, first_df = first
+            if not first_df.equals(t):
+                raise IncompatibleTrialError((first_name, name))
+        return first
+
+    def bin_responses(self, time_step: float = 0.005):
         """
         transform a point process into bins of size `time_step` containinng
         the number of events that occurred within that time bin.
         """
         self._dataset.time_step = time_step
-        self._dataset.get_responses()["events"] = self.responses_apply(self._hist)
+        self._dataset.responses = self._dataset.get_responses().apply(lambda neuron: \
+              self._dataset.get_trial_data().join(neuron.rename("events")).apply(self._hist, axis=1)
+          )
 
     def _hist(self, row) -> np.ndarray:
-        duration = np.max(row["events"]) if len(row["events"]) else 0
-        # we ignore `duration % time_step` at the end
-        bin_edges = np.arange(0, duration, self._dataset.get_time_step())
+        start, stop = row["interval"]
+        time_step = self._dataset.get_time_step()
+        # np.arange does not include the end of the interval,
+        # so we make the end one time_step later
+        bin_edges = np.arange(start, stop + time_step, time_step)
         histogram, _ = np.histogram(row["events"], bin_edges)
         return histogram
 
@@ -178,43 +198,37 @@ class DatasetBuilder:
         be transformed into `log(x + log_transform_compress) - log(x)`
         """
         gammatone_params = {
-                'window_time': self._dataset.get_time_step() * window_scale,
-                'hop_time': self._dataset.get_time_step(),
-                'channels': frequency_bin_count,
-                'f_min': min_frequency,
-                'f_max': max_frequency,
+            "window_time": self._dataset.get_time_step() * window_scale,
+            "hop_time": self._dataset.get_time_step(),
+            "channels": frequency_bin_count,
+            "f_min": min_frequency,
+            "f_max": max_frequency,
         }
         if log_transform:
             log_transform_params = {
-                    'compress': log_transform_compress,
+                "compress": log_transform_compress,
             }
         else:
             log_transform_params = None
         wav_data = self.data_source.get_stimuli()
-        spectrograms = {
+        spectrograms = pd.Series({
             k: self._spectrogram(v, log_transform_params, gammatone_params)
             for k, v in wav_data.items()
-        }
-        self._dataset.stimuli = (
-            self._dataset.get_responses()
-            .apply(lambda x: spectrograms[x.name[0]], axis="columns")
-            .sort_index()
-        )
+        })
+        self._dataset.stimuli = pd.DataFrame()
+        self._dataset.stimuli["spectrogram"] = spectrograms
+        self._dataset.stimuli["stimulus.length"] = self._dataset.stimuli["spectrogram"].apply(lambda x: x.shape[0])
 
     @staticmethod
     def _spectrogram(wav_data, log_transform_params, gammatone_params):
         sample_rate, samples = wav_data
-        spectrogram = mem.cache(gtgram)(
-            samples,
-            sample_rate,
-            **gammatone_params
-        )
+        spectrogram = mem.cache(gtgram)(samples, sample_rate, **gammatone_params)
         if log_transform_params is not None:
-            compress = log_transform_params['compress']
+            compress = log_transform_params["compress"]
             spectrogram = np.log10(spectrogram + compress) - np.log10(compress)
         return spectrogram.T
 
-    def create_time_lags(self, tau : float = 0.300, basis: Optional[Basis] = None):
+    def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
         """
         `tau`: length of window (in secs) to consider in prediction
         `basis`: an instance of a class that inherits from
@@ -250,84 +264,58 @@ class DatasetBuilder:
 
 
         """
-
         self.tau = tau
-        self.basis = basis
-        self._dataset.get_responses()["events"] = self.responses_apply(self._stagger)
+        self.basis = None
+        if basis is not None:
+            window_length = self._dataset.to_steps(self.tau)
+            self.basis = basis.get_basis(window_length)
+        self._dataset.responses = self._dataset.get_responses() \
+        .apply(lambda neuron:
+            self._dataset.get_trial_data() \
+                .join(neuron.rename("events")) \
+                .join(self._dataset.get_stimuli()["stimulus.length"], on='stimulus.name') \
+                .apply(self._stagger, axis=1)
+        )
 
     def _stagger(self, row):
-        start = self._dataset.to_steps(row["stimulus"]["interval"][0])
+        stim_start, _ = row["stimulus.interval"]
+        start = self._dataset.to_steps(stim_start)
         window_length = self._dataset.to_steps(self.tau)
-        stop = start + self._dataset.get_stimuli()[row.name].shape[0]
-        total_time_steps = start + stop - 1 + window_length
-        pad_width = max(0, total_time_steps - len(row["events"]))
-        events = np.pad(row["events"], (0, pad_width))
-        assert len(events) >= total_time_steps
+        stop = start + row['stimulus.length']
+        events = row["events"]
+        assert len(events) >= stop - 1 + window_length
         time_lagged = hankel(
             events[start:stop], events[stop - 1 : stop - 1 + window_length]
         )
         if self.basis is not None:
-            basis_matrix = self.basis.get_basis(window_length)
-            return np.dot(time_lagged, basis_matrix)
+            time_lagged = np.dot(time_lagged, self.basis)
         return time_lagged
 
     def pool_trials(self):
         """Pool spikes across trials"""
-        neurons = self._dataset.get_responses()['events'].columns
-        events = pd.concat(
-                {"events": self._dataset.get_responses()["events"].groupby("stim").agg({n: 'sum' for n in neurons})},
-            axis="columns",
-        )
-        # we assume that all fields except for events are the same across trials
-        # because we don't have a way to aggregate other datatypes
-        self._dataset.responses = (
-            self._dataset.get_responses()
-            .groupby("stim")
-            .first()
-            .drop("events", axis="columns", level=0)
-            .join(events)
-        )
-        self._dataset.stimuli = self._dataset.get_stimuli().groupby("stim").first()
-
-    def responses_apply(self, func: Callable[[pd.DataFrame], Any]):
-        """
-        Responses has a complex structure; this function provides a
-        simple way to apply a function to each row
-
-        `func`: (row of responses dataframe) -> (element of output series)
-
-        returns (pandas.Series): the collected outputs of `func`
-        """
-        return (
-            self._dataset.get_responses()
-            .groupby(level=1, axis="columns")
-            .parallel_apply(
-                lambda x: x.droplevel(1, axis="columns").apply(func, axis="columns")
-            )
-        )
+        neurons = self._dataset.get_responses().columns
+        self._dataset.responses = self._dataset.get_responses().join(self._dataset.get_trial_data()) \
+            .groupby("stimulus.name") \
+            .agg({n: "sum" for n in neurons})[neurons]
 
     def get_dataset(self):
         """Return the fully constructed `Dataset` object"""
         dataset = self._dataset
         dataset.responses = dataset.get_responses().sort_index()
-        assert np.array_equal(
-            dataset.get_responses().index, dataset.get_stimuli().index
-        )
-        dataset.index = dataset.get_responses().index
         return dataset
 
 
 class Dataset:
-    """Holds constructed response matrix and stimuli
-    """
+    """Holds constructed response matrix and stimuli"""
+
     responses: Optional[pd.DataFrame]
     """"""
     stimuli: Optional[pd.DataFrame]
+    """"""""
+    trial_data: Optional[pd.DataFrame]
     """"""
     time_step: Optional[float]
     """granularity of time"""
-    index: Optional[pd.Index]
-    """"""
 
     def __init__(self):
         pass
@@ -342,6 +330,11 @@ class Dataset:
             raise InvalidConstructionSequence("must call `bin_responses` first")
         return self.time_step
 
+    def get_trial_data(self) -> pd.DataFrame:
+        if self.trial_data is None:
+            raise InvalidConstructionSequence("must call `load_responses` first")
+        return self.trial_data
+
     def get_responses(self) -> pd.DataFrame:
         if self.responses is None:
             raise InvalidConstructionSequence("must call `load_responses` first")
@@ -352,11 +345,11 @@ class Dataset:
         get numpy arrays representing the responses and the stimuli
         at the given pandas index range
         """
-        events = self.get_responses().loc[key]["events"]
+        events = self.get_responses().loc[key]
         responses = np.concatenate(
             [np.stack(x, axis=2) for x in events.values.tolist()]
         )
-        stimuli = np.concatenate(self.get_stimuli().loc[key].values)
+        stimuli = np.concatenate(self.get_stimuli()["spectrogram"].loc[key].values)
         return responses, stimuli
 
     def to_steps(self, time_in_seconds):
@@ -386,5 +379,13 @@ class InvalidConstructionSequence(Exception):
         super().__init__()
         self.description = description
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"invalid construction sequence: {self.description}"
+
+class IncompatibleTrialError(Exception):
+    def __init__(self, trial_pair: Tuple[str, str]):
+        super().__init__()
+        self.trial_pair = trial_pair
+
+    def __str__(self) -> str:
+        return f"at least two trials contained conflicting data: {self.trial_pair}"

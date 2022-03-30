@@ -9,7 +9,7 @@ def stimtrial_pprox():
             "$schema": "https://meliza.org/spec:2/stimtrial.json#",
             "pprox": [
                 {
-                    "events": [0.2, 1, 4],
+                    "events": [0.2, 1, 1.5],
                     "interval": [0, 3],
                     "stimulus": {
                         "interval": [1, 2],
@@ -32,7 +32,7 @@ def cn_pprox():
             "pprox": [
                 {
                     "index": 0,
-                    "events": [0.2, 1, 4],
+                    "events": [0.2, 1, 1.5],
                     "recording": {
                         "start": 0,
                         "stop": 30,
@@ -54,7 +54,7 @@ def ar_pprox():
                 {
                     "trial": 0,
                     "units": "ms",
-                    "event": [200, 1000, 4000],
+                    "event": [200, 1000, 1500],
                     "stim_uuid": "song_1",
                     "stim_on": 1,
                 }
