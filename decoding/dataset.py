@@ -9,10 +9,10 @@ use data from a local folder on our computer we might use decoding.sources.FsSou
 For other options, see decoding.sources. In this example, we'll use
 decoding.sources.NeurobankSource, which will automatically download a list of
 identifiers from Neurobank. Let's suppose we know we want to use a pprox responses
-file with identifier `P120_1_1_c92`.
+from two files with identifiers `P120_1_1_c92` and `P120_1_1_c89`.
 >>> from decoding.sources import NeurobankSource
 >>> import asyncio
->>> responses = ['P120_1_1_c92']
+>>> responses = ['P120_1_1_c92', 'P120_1_1_c89']
 >>> stimuli = [] # we'll leave this empty for now
 >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
 >>> test_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
@@ -70,7 +70,7 @@ Index(['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09',
        'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x'],
       dtype='object', name='stimulus.name')
 >>> dataset.responses.columns
-Index(['P120_1_1_c92'], dtype='object')
+Index(['P120_1_1_c92', 'P120_1_1_c89'], dtype='object')
 
 Let's use our dataset to perform a simple neural decoding task
 
@@ -80,17 +80,17 @@ Let's use our dataset to perform a simple neural decoding task
 >>> test_stimuli = set(dataset.responses.index).difference(training_stimuli)
 >>> X, Y = dataset[training_stimuli]
 >>> X.shape, Y.shape
-((2476, 60, 1), (2476, 50))
+((2476, 60, 2), (2476, 50))
 >>> X = np.resize(X, (X.shape[0], X.shape[1] * X.shape[2]))
 >>> model = Ridge(alpha=1.0)
 >>> model.fit(X, Y)
 Ridge()
 >>> model.score(X, Y)
-0.19035596
+0.30159992
 >>> X_test, Y_test = dataset[test_stimuli]
 >>> X_test = np.resize(X_test, (X_test.shape[0], X_test.shape[1] * X_test.shape[2]))
 >>> model.score(X_test, Y_test)
-0.1350506
+0.15341238
 
 """
 from typing import Collection, Optional, Callable, Any, Iterable, Tuple
