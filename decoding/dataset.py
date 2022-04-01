@@ -93,7 +93,7 @@ Ridge()
 0.15341238
 
 """
-from typing import Collection, Optional, Callable, Any, Iterable, Tuple
+from typing import List, Optional, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -126,7 +126,9 @@ class DatasetBuilder:
     def set_data_source(self, data_source: DataSource):
         self.data_source = data_source
 
-    def load_responses(self):
+    def load_responses(self, ignore_columns: Optional[List[str]] = None):
+        if ignore_columns is None:
+            ignore_columns = []
         clusters = self.data_source.get_responses()
         assert len(clusters) > 0, "no clusters"
         trial_data = pd.concat(
@@ -138,7 +140,8 @@ class DatasetBuilder:
         )
         trial_data.columns = trial_data.columns.reorder_levels(order=[1, 0])
         self._dataset.responses = trial_data["events"]
-        del trial_data["events"]
+        ignore_columns.append("events")
+        trial_data = trial_data.drop(columns=ignore_columns, level=0)
         single_trial = self._aggregate_trials(trial_data)
         assert single_trial is not None
         _, trial_data = single_trial
@@ -157,7 +160,7 @@ class DatasetBuilder:
                 first = (name, t)
             first_name, first_df = first
             if not first_df.equals(t):
-                raise IncompatibleTrialError((first_name, name))
+                raise IncompatibleTrialError({first_name: first_df, name: t})
         return first
 
     def bin_responses(self, time_step: float = 0.005):
@@ -383,9 +386,13 @@ class InvalidConstructionSequence(Exception):
         return f"invalid construction sequence: {self.description}"
 
 class IncompatibleTrialError(Exception):
-    def __init__(self, trial_pair: Tuple[str, str]):
+    def __init__(self, trial_pair: Dict[str, pd.DataFrame]):
         super().__init__()
         self.trial_pair = trial_pair
 
     def __str__(self) -> str:
-        return f"at least two trials contained conflicting data: {self.trial_pair}"
+        a, b = tuple(self.trial_pair.keys())
+        return (
+            f"at least two trials contained conflicting data: {a}, {b}\n"
+            f"{self.trial_pair[a].compare(self.trial_pair[b])}"
+            )
