@@ -352,7 +352,11 @@ class Dataset:
         responses = np.concatenate(
             [np.stack(x, axis=2) for x in events.values.tolist()]
         )
-        stimuli = np.concatenate(self.get_stimuli()["spectrogram"].loc[key].values)
+        try:
+            stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
+        except KeyError:
+            stimuli_index = key
+        stimuli = np.concatenate(self.get_stimuli().loc[stimuli_index]["spectrogram"].values)
         return responses, stimuli
 
     def to_steps(self, time_in_seconds):

@@ -45,7 +45,7 @@ def test_building(mem_data_source):
     # lagged = np.array([0])
     # assert np.array_equiv(actual_lagged, lagged)
     dataset = builder.get_dataset()
-    X, Y = dataset[:]
+    X, Y = dataset[[0]]
     assert len(X) == len(Y)
 
 
@@ -60,5 +60,5 @@ def test_pool_trials(mem_data_source):
     builder.pool_trials()
     assert builder._dataset.get_responses().columns == neurons
     dataset = builder.get_dataset()
-    X, Y = dataset[:]
+    X, Y = dataset[['song_1']]
     assert len(X) == len(Y)
