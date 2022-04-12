@@ -275,7 +275,9 @@ class DatasetBuilder:
         self._dataset.responses = self._dataset.get_responses() \
         .apply(lambda neuron:
             self._dataset.get_trial_data() \
-                .join(neuron.rename("events")) \
+                .set_index(neuron.index) \
+                .join(neuron.rename("events"), how="right") \
+                .rename_axis("")
                 .join(self._dataset.get_stimuli()["stimulus.length"], on='stimulus.name') \
                 .apply(self._stagger, axis=1)
         )

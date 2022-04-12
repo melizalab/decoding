@@ -42,8 +42,6 @@ def test_building(mem_data_source):
     print(spectrogram)
     shape = (spectrogram_length, int(tau / time_step))
     assert actual_lagged.shape == shape
-    # lagged = np.array([0])
-    # assert np.array_equiv(actual_lagged, lagged)
     dataset = builder.get_dataset()
     X, Y = dataset[[0]]
     assert len(X) == len(Y)
@@ -58,6 +56,20 @@ def test_pool_trials(mem_data_source):
     builder.create_time_lags()
     neurons = builder._dataset.get_responses().columns
     builder.pool_trials()
+    assert builder._dataset.get_responses().columns == neurons
+    dataset = builder.get_dataset()
+    X, Y = dataset[['song_1']]
+    assert len(X) == len(Y)
+
+def test_pool_trials_before_lag(mem_data_source):
+    builder = DatasetBuilder()
+    builder.set_data_source(mem_data_source)
+    builder.load_responses()
+    builder.bin_responses()
+    builder.add_stimuli()
+    builder.pool_trials()
+    builder.create_time_lags()
+    neurons = builder._dataset.get_responses().columns
     assert builder._dataset.get_responses().columns == neurons
     dataset = builder.get_dataset()
     X, Y = dataset[['song_1']]
