@@ -7,11 +7,11 @@ import numpy as np
 
 class Basis(ABC):
     @abstractmethod
-    def __init__(self, num_basis_functions):
+    def __init__(self, num_basis_functions: int):
         pass
 
     @abstractmethod
-    def get_basis(self, num_timesteps):
+    def get_basis(self, num_timesteps: int) -> np.ndarray:
         """Returns a ndarray with shape
         (num_timesteps, num_basis_functions)
 
@@ -38,7 +38,7 @@ class RaisedCosineBasis(Basis):
         self.linearity_factor = linearity_factor
 
     @staticmethod
-    def raised_cos(center, domain, peak_spacing):
+    def raised_cos(center, domain, peak_spacing) -> np.ndarray:
         """Evaluates a raised cosine (which looks similar to a Gaussian
         curve) over a discrete domain given by `domain`, centered at
         `center` and with spread related to `peak_spacing`.
@@ -46,7 +46,7 @@ class RaisedCosineBasis(Basis):
         cos_input = np.clip((domain - center) * np.pi / peak_spacing / 2, -np.pi, np.pi)
         return (np.cos(cos_input) + 1) / 2
 
-    def get_basis(self, num_timesteps):
+    def get_basis(self, num_timesteps) -> np.ndarray:
         # nonlinearity for stretching x axis
         nonlinearity = lambda x: np.log(x + self.linearity_factor + self._MIN_OFFSET)
 

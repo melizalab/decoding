@@ -1,6 +1,6 @@
-# Decoding
+# Preconstruct
 
-The `decoding` module creates a dataset that is arranged to facilitate
+The `preconstruct` module creates a dataset that is arranged to facilitate
 neural decoding, i.e. reconstructing a stimulus given the neural
 response that it induces.
 
@@ -9,7 +9,7 @@ response that it induces.
 To view documentation, run the following code:
 ```
 pip install -r requirements-dev.txt
-pdoc decoding
+pdoc preconstruct
 ```
 
 ## Running tests

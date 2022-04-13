@@ -117,7 +117,7 @@ class DatasetBuilder:
 
     data_source: DataSource
     tau: Optional[float]
-    basis: Optional[Basis]
+    basis: Optional[np.ndarray]
 
     def __init__(self):
         self._dataset = Dataset()
