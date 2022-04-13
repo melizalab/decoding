@@ -303,7 +303,6 @@ class DatasetBuilder:
         self._dataset.responses = self._dataset.get_responses().join(self._dataset.get_trial_data()) \
             .groupby("stimulus.name") \
             .agg({n: "sum" for n in neurons})[neurons]
-        self._dataset.trial_data = self._dataset.get_trial_data().groupby("stimulus.name").agg("first").reset_index()
 
     def get_dataset(self):
         """Return the fully constructed `Dataset` object"""
