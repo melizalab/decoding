@@ -25,17 +25,11 @@ charset-normalizer==2.0.12
     # via
     #   -r requirements.txt
     #   aiohttp
-cycler==0.10.0
-    # via
-    #   -r requirements.txt
-    #   matplotlib
 frozenlist==1.3.0
     # via
     #   -r requirements.txt
     #   aiohttp
     #   aiosignal
-gammatone @ git+https://github.com/christianbrodbeck/gammatone.git@fmax
-    # via -r requirements.txt
 idna==3.3
     # via
     #   -r requirements.txt
@@ -48,22 +42,10 @@ joblib==1.1.0
     # via
     #   -r requirements.txt
     #   scikit-learn
-kiwisolver==1.3.1
-    # via
-    #   -r requirements.txt
-    #   matplotlib
 markupsafe==2.1.0
     # via
     #   jinja2
     #   pdoc
-matplotlib==3.4.2
-    # via
-    #   -r requirements.txt
-    #   gammatone
-mock==4.0.3
-    # via
-    #   -r requirements.txt
-    #   gammatone
 multidict==6.0.2
     # via
     #   -r requirements.txt
@@ -71,30 +53,20 @@ multidict==6.0.2
     #   yarl
 nodeenv==1.6.0
     # via pyright
-nose==1.3.7
+numpy==1.22.3
     # via
     #   -r requirements.txt
-    #   gammatone
-numpy==1.21.1
-    # via
-    #   -r requirements.txt
-    #   gammatone
-    #   matplotlib
     #   pandas
     #   scikit-learn
     #   scipy
 packaging==21.3
     # via pytest
-pandas==1.3.1
+pandas==1.4.2
     # via -r requirements.txt
 parse==1.19.0
     # via -r requirements.txt
 pdoc==10.0.3
     # via -r requirements-dev.in
-pillow==8.3.1
-    # via
-    #   -r requirements.txt
-    #   matplotlib
 pluggy==1.0.0
     # via pytest
 py==1.11.0
@@ -102,10 +74,7 @@ py==1.11.0
 pygments==2.11.2
     # via pdoc
 pyparsing==2.4.7
-    # via
-    #   -r requirements.txt
-    #   matplotlib
-    #   packaging
+    # via packaging
 pyright==1.1.229
     # via -r requirements-dev.in
 pytest==6.2.5
@@ -117,23 +86,20 @@ pytest-asyncio==0.17.2
 python-dateutil==2.8.2
     # via
     #   -r requirements.txt
-    #   matplotlib
     #   pandas
-pytz==2021.1
+pytz==2022.1
     # via
     #   -r requirements.txt
     #   pandas
 scikit-learn==1.0.2
     # via -r requirements-dev.in
-scipy==1.7.0
+scipy==1.8.0
     # via
     #   -r requirements.txt
-    #   gammatone
     #   scikit-learn
 six==1.16.0
     # via
     #   -r requirements.txt
-    #   cycler
     #   python-dateutil
 threadpoolctl==3.1.0
     # via scikit-learn

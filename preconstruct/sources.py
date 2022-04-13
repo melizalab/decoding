@@ -5,7 +5,7 @@
 Let's build a simple application that accepts input in the form of a DataSource.
 
 >>> import numpy as np
->>> from decoding.sources import DataSource, MemorySource
+>>> from preconstruct.sources import DataSource, MemorySource
 >>> def stim_resp_summary(data_source: DataSource):
 ...     stimuli = data_source.get_stimuli()
 ...     print('stimuli sample rates:')
@@ -53,7 +53,7 @@ from scipy.io import wavfile
 from appdirs import user_cache_dir
 
 
-from decoding import APP_NAME, APP_AUTHOR
+from preconstruct import APP_NAME, APP_AUTHOR
 from . import dataset
 
 class StimConfig(TypedDict):
@@ -235,7 +235,7 @@ class NeurobankSource(FsSource):
     way:
     ```
     >>> import asyncio
-    >>> from decoding.sources import NeurobankSource
+    >>> from preconstruct.sources import NeurobankSource
     >>> stimuli = ['ztqee46x', '00oagdl5', 'g29wxi4q', 'mrel2o09', 'vekibwgj', \
         'l1a3ltpy', 'igmi8fxa', 'c95zqjxq', 'w08e1crn', 'jkexyrd5', 'p1mrfhop', ]
     >>> responses = ['P120_1_1_c92']

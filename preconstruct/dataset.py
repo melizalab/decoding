@@ -4,13 +4,13 @@
 
 Let's build a simple dataset for neural decoding. The first step is determining
 what data we'll use. Depending on where our data is stored we'll use different
-classes that inherit from decoding.sources.DataSource. For example, if we want to
-use data from a local folder on our computer we might use decoding.sources.FsSource.
-For other options, see decoding.sources. In this example, we'll use
-decoding.sources.NeurobankSource, which will automatically download a list of
+classes that inherit from preconstruct.sources.DataSource. For example, if we want to
+use data from a local folder on our computer we might use preconstruct.sources.FsSource.
+For other options, see preconstruct.sources. In this example, we'll use
+preconstruct.sources.NeurobankSource, which will automatically download a list of
 identifiers from Neurobank. Let's suppose we know we want to use a pprox responses
 from two files with identifiers `P120_1_1_c92` and `P120_1_1_c89`.
->>> from decoding.sources import NeurobankSource
+>>> from preconstruct.sources import NeurobankSource
 >>> import asyncio
 >>> responses = ['P120_1_1_c92', 'P120_1_1_c89']
 >>> stimuli = [] # we'll leave this empty for now
@@ -30,7 +30,7 @@ Let's make a new DataSource that includes the stimuli
 
 Now we can start building our dataset. We will put our data into a
 `DatasetBuilder`, which will allow us to configure the format of our dataset.
->>> from decoding.dataset import DatasetBuilder
+>>> from preconstruct.dataset import DatasetBuilder
 >>> builder = DatasetBuilder()
 >>> builder.set_data_source(data_source)
 >>> builder.load_responses()
@@ -99,14 +99,14 @@ import numpy as np
 import pandas as pd
 from joblib import Memory
 from appdirs import user_cache_dir
-from gammatone.gtgram import gtgram
 from scipy.linalg import hankel
 
-import decoding
-from decoding.sources import DataSource
-from decoding.basisfunctions import Basis
+import preconstruct
+from preconstruct.gammatone.gtgram import gtgram
+from preconstruct.sources import DataSource
+from preconstruct.basisfunctions import Basis
 
-_cache_dir = user_cache_dir(decoding.APP_NAME, decoding.APP_AUTHOR)
+_cache_dir = user_cache_dir(preconstruct.APP_NAME, preconstruct.APP_AUTHOR)
 mem = Memory(_cache_dir, verbose=0)
 
 
@@ -235,13 +235,13 @@ class DatasetBuilder:
         """
         `tau`: length of window (in secs) to consider in prediction
         `basis`: an instance of a class that inherits from
-        `decoding.basisfunctions.Basis`, initialized with the dimension
+        `preconstruct.basisfunctions.Basis`, initialized with the dimension
         of the projection
 
         ## example
         <!--
         >>> import asyncio
-        >>> from decoding.sources import NeurobankSource
+        >>> from preconstruct.sources import NeurobankSource
         >>> responses = ['P120_1_1_c92']
         >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
         >>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
@@ -262,7 +262,7 @@ class DatasetBuilder:
 
 
         -->
-        >>> from decoding.basisfunctions import RaisedCosineBasis
+        >>> from preconstruct.basisfunctions import RaisedCosineBasis
         >>> builder.create_time_lags(tau=0.3, basis=RaisedCosineBasis(30))
 
 
