@@ -1,5 +1,5 @@
 import pytest
-from decoding.sources import NeurobankSource, MemorySource
+from preconstruct.sources import NeurobankSource, MemorySource
 
 @pytest.fixture
 def nbank_stimuli():

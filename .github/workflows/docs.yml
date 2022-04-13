@@ -18,7 +18,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
       - name: build docs
         run: |
-          pdoc decoding -o docs
+          pdoc preconstruct -o docs
       - name: push docs
         run: |
           ghp-import -nfop docs

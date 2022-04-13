@@ -1,8 +1,8 @@
 import pytest
 import numpy as np
 
-from decoding import DatasetBuilder
-from decoding.sources import MemorySource
+from preconstruct import DatasetBuilder
+from preconstruct.sources import MemorySource
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ def test_pool_trials_before_lag(mem_data_source):
     assert len(X) == len(Y)
 
 async def test_margot_data():
-    from decoding import sources, dataset, basisfunctions
+    from preconstruct import sources, dataset, basisfunctions
     from sklearn.linear_model import RidgeCV, Ridge
     responses = ['P4_p1r2_ch20_c31','O129_p1r2_ch19_c3','P4_p1r2_ch22_c23']
 #responses = "unitfiles_l2a.txt"
