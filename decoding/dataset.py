@@ -44,7 +44,7 @@ Next, we load the stimuli. We must choose parameters to control how the gammaton
 spectrograms are generated. Consult DatasetBuilder.add_stimuli for details on each
 argument.
 >>> builder.add_stimuli(
-...     window_scale=1,
+...     window_scale=1.0,
 ...     frequency_bin_count=50,
 ...     min_frequency=500,
 ...     max_frequency=8000,
@@ -184,7 +184,7 @@ class DatasetBuilder:
 
     def add_stimuli(
         self,
-        window_scale=1,
+        window_scale=1.0,
         frequency_bin_count=50,
         min_frequency=500,
         max_frequency=8000,
@@ -274,11 +274,12 @@ class DatasetBuilder:
             self.basis = basis.get_basis(window_length)
         self._dataset.responses = self._dataset.get_responses() \
         .apply(lambda neuron:
-            self._dataset.get_trial_data() \
-                .set_index(neuron.index) \
-                .join(neuron.rename("events"), how="right") \
-                .rename_axis("")
+            self._dataset.get_trial_data()[["stimulus.interval", "stimulus.name"]] \
+                .join(neuron.rename("events"), on=neuron.index.name) \
+                .groupby(neuron.index.name).agg("first") \
+                .reset_index() \
                 .join(self._dataset.get_stimuli()["stimulus.length"], on='stimulus.name') \
+                .set_index(neuron.index.name) \
                 .apply(self._stagger, axis=1)
         )
 
