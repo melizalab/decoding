@@ -80,7 +80,7 @@ Let's use our dataset to perform a simple neural decoding task
 >>> test_stimuli = set(dataset.responses.index).difference(training_stimuli)
 >>> X, Y = dataset[training_stimuli]
 >>> X.shape, Y.shape
-((2476, 60, 2), (2476, 50))
+((2476, 2, 60), (2476, 50))
 >>> X = np.resize(X, (X.shape[0], X.shape[1] * X.shape[2]))
 >>> model = Ridge(alpha=1.0)
 >>> model.fit(X, Y)
