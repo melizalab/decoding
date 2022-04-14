@@ -300,9 +300,18 @@ class DatasetBuilder:
     def pool_trials(self):
         """Pool spikes across trials"""
         neurons = self._dataset.get_responses().columns
+        if not self._dataset.get_trial_data() \
+            .groupby("stimulus.name")["stimulus.interval"] \
+            .apply(lambda ser: len(ser.unique()) == 1).all():
+            raise InconsistentStimulusInterval
         self._dataset.responses = self._dataset.get_responses().join(self._dataset.get_trial_data()) \
             .groupby("stimulus.name") \
-            .agg({n: "sum" for n in neurons})[neurons]
+            .agg({n: self._trim_to_shortest_and_sum for n in neurons})[neurons]
+
+    @staticmethod
+    def _trim_to_shortest_and_sum(ser: pd.Series) -> pd.Series:
+        min_length = ser.apply(len).min()
+        return ser.apply(lambda x: x[:min_length]).sum()
 
     def get_dataset(self):
         """Return the fully constructed `Dataset` object"""
@@ -403,3 +412,10 @@ class IncompatibleTrialError(Exception):
             f"at least two trials contained conflicting data: {a}, {b}\n"
             f"{self.trial_pair[a].compare(self.trial_pair[b])}"
             )
+
+class InconsistentStimulusInterval(Exception):
+    def __str__(self) -> str:
+        return (
+                "if you want to pool trials, every stimulus presentation must have"
+                " the same stimulus.interval"
+               )

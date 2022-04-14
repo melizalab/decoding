@@ -59,12 +59,12 @@ from . import dataset
 class StimConfig(TypedDict):
     """type annotation for information about a stimulus presentation"""
     name: str
-    interval: List[float]
+    interval: Tuple[float]
 
 class Trial(TypedDict):
     """type annotation for a trial"""
     events: List[float]
-    interval: List[float]
+    interval: Tuple[float]
     stimulus: StimConfig
     offset: Optional[float]
     index: Optional[int]
@@ -345,6 +345,8 @@ def _fix_pprox(responses: Dict[str, Pprox], durations: Dict[str, float]):
             raise UnrecognizedPproxFormat(name)
         for i, trial in enumerate(json_data["pprox"]):
             trial["index"] = i
+            trial["interval"] = tuple(trial["interval"])
+            trial["stimulus"]["interval"] = tuple(trial["stimulus"]["interval"])
     return responses
 
 
@@ -371,6 +373,8 @@ def _ar_data_shim(json_data, durations):
             trial["events"] = [x / 1000 for x in trial["events"]]
         _rename_key(trial, "stim_uuid", "stim")
         _rename_key(trial, "trial", "index")
+        # we want to put the `interval` information in the cn_pprox format
+        # so we list absolute recording start and stop with a sample rate of 1
         trial["recording"] = {
             "start": 0,
             "stop": trial["stim_on"] + durations[trial["stim"]] + 1,
@@ -392,15 +396,15 @@ def _cn_data_shim(json_data, durations):
     del json_data["protocol"]
     for trial in json_data["pprox"]:
         offset = trial.get("offset") or 0
-        trial["interval"] = [
+        trial["interval"] = (
             (trial["recording"]["start"] / sampling_rate) - offset,
             (trial["recording"]["stop"] / sampling_rate) - offset,
-        ]
+        )
         del trial["recording"]
         stim_off = durations[trial["stim"]]
         trial["stimulus"] = {
             "name": trial["stim"],
-            "interval": [trial["stim_on"], trial["stim_on"] + stim_off],
+            "interval": (trial["stim_on"], trial["stim_on"] + stim_off),
         }
         del trial["stim"]
         del trial["stim_on"]
