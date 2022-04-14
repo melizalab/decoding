@@ -2,22 +2,7 @@ import pytest
 import numpy as np
 
 from preconstruct import DatasetBuilder
-from preconstruct.sources import NeurobankSource, MemorySource
-
-@pytest.fixture
-def mem_data_source(stimtrial_pprox, stimuli):
-    responses = stimtrial_pprox
-    return MemorySource(responses, stimuli)
-
-@pytest.fixture
-async def real_data_source():
-    responses = ['P120_1_1_c92', 'P120_1_1_c89']
-    stimuli = \
-    ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09', \
-    'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
-    url = 'https://gracula.psyc.virginia.edu/neurobank/'
-    return await NeurobankSource.create(url, stimuli, responses)
-
+from preconstruct.stimuliformats import Gammatone
 
 
 def test_building(mem_data_source):
@@ -38,7 +23,7 @@ def test_building(mem_data_source):
     assert actual_binned.shape == binned.shape
     assert np.array_equiv(binned, actual_binned)
 
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     print(builder._dataset.get_responses().columns)
     spectrogram = builder._dataset.get_stimuli()["spectrogram"].loc[stimulus["name"]]
     spectrogram_length= spectrogram.shape[0]
@@ -61,7 +46,7 @@ def test_pool_trials(mem_data_source):
     builder.set_data_source(mem_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     builder.create_time_lags()
     neurons = builder._dataset.get_responses().columns
     builder.pool_trials()
@@ -75,7 +60,7 @@ def test_pool_trials_before_lag(real_data_source):
     builder.set_data_source(real_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     builder.pool_trials()
     builder.create_time_lags()
     dataset_pool_first = builder.get_dataset()
@@ -84,7 +69,7 @@ def test_pool_trials_before_lag(real_data_source):
     builder.set_data_source(real_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     builder.create_time_lags()
     builder.pool_trials()
     dataset_pool_second = builder.get_dataset()
@@ -107,12 +92,13 @@ async def test_margot_data():
     builder.bin_responses(time_step=0.001) # 5 ms
     print("computing spectrograms")
     builder.add_stimuli(
-         window_scale=2.5,
-         frequency_bin_count=30,
-         min_frequency=500,
-         max_frequency=8000,
-         log_transform=True,
-         log_transform_compress=1,
+         Gammatone(
+             window_time=0.0025,
+             frequency_bin_count=30,
+             min_frequency=500,
+             max_frequency=8000,
+             log_transform_compress=1,
+         )
     )
     basis = basisfunctions.RaisedCosineBasis(30, linearity_factor=30)
     print("creating design matrices")

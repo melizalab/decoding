@@ -1,0 +1,20 @@
+import pytest
+import pandas as pd
+from preconstruct import DatasetBuilder
+from preconstruct.dataset import IncompatibleStimuliFormat
+from preconstruct.stimuliformats import *
+
+def test_categorical(real_data_source):
+    builder = DatasetBuilder()
+    builder.set_data_source(real_data_source)
+    builder.load_responses()
+    builder.bin_responses()
+    builder.add_stimuli(Categorical())
+    stimuli = pd.Series(['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
+       'mrel2o09', 'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x'])
+    actual_stimuli = builder._dataset.get_stimuli()["Categorical"].reset_index(drop=True)
+    assert (actual_stimuli == stimuli).all()
+    with pytest.raises(IncompatibleStimuliFormat):
+        builder.create_time_lags()
+    dataset = builder.get_dataset()
+    X, Y = dataset[:]

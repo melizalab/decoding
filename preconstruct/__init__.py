@@ -10,10 +10,16 @@ and pass it a `preconstruct.dataset.DatasetBuilder` and configure your dataset.
 
 See `preconstruct.dataset`.
 """
+from joblib import Memory
+from appdirs import user_cache_dir
 
 APP_NAME = "preconstruct"
 APP_AUTHOR = "melizalab"
 __version__ = "0.1.2"
+
+
+_cache_dir = user_cache_dir(APP_NAME, APP_AUTHOR)
+_mem = Memory(_cache_dir, verbose=0)
 
 from preconstruct.dataset import Dataset, DatasetBuilder
 from preconstruct import basisfunctions

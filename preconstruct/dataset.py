@@ -43,13 +43,15 @@ The unit for this argument and all other time values will be seconds.
 Next, we load the stimuli. We must choose parameters to control how the gammatone
 spectrograms are generated. Consult DatasetBuilder.add_stimuli for details on each
 argument.
+>>> from preconstruct.stimuliformats import Gammatone
 >>> builder.add_stimuli(
-...     window_scale=1.0,
-...     frequency_bin_count=50,
-...     min_frequency=500,
-...     max_frequency=8000,
-...     log_transform=True,
-...     log_transform_compress=1,
+...     Gammatone(
+...         window_time=0.005,
+...         frequency_bin_count=50,
+...         min_frequency=500,
+...         max_frequency=8000,
+...         log_transform_compress=1,
+...     )
 ... )
 
 Now we will convert the binned spikes into a lagged matrix, with a with a window
@@ -97,17 +99,12 @@ from typing import List, Optional, Dict, Tuple
 
 import numpy as np
 import pandas as pd
-from joblib import Memory
-from appdirs import user_cache_dir
 from scipy.linalg import hankel
 
 import preconstruct
-from preconstruct.gammatone.gtgram import gtgram
 from preconstruct.sources import DataSource
 from preconstruct.basisfunctions import Basis
-
-_cache_dir = user_cache_dir(preconstruct.APP_NAME, preconstruct.APP_AUTHOR)
-mem = Memory(_cache_dir, verbose=0)
+from preconstruct.stimuliformats import StimuliFormat, SameTimeIndexAsResponse
 
 
 class DatasetBuilder:
@@ -149,14 +146,16 @@ class DatasetBuilder:
 
     @staticmethod
     def _aggregate_trials(trial_data: pd.DataFrame) -> Optional[Tuple[str, pd.DataFrame]]:
-        """if all trials contain the same data, return one trial
+        """combine corresponding trials across different pprox files
+
+        if all trials contain the same data, return one trial
         otherwise, raise a IncompatibleTrialError
         """
         trials = trial_data.groupby(axis=1, level=1)
         first = None
         for name, t in trials:
             t = t.droplevel(axis=1, level=1)
-            if first == None:
+            if first is None:
                 first = (name, t)
             first_name, first_df = first
             if not first_df.equals(t):
@@ -184,12 +183,7 @@ class DatasetBuilder:
 
     def add_stimuli(
         self,
-        window_scale=1.0,
-        frequency_bin_count=50,
-        min_frequency=500,
-        max_frequency=8000,
-        log_transform=True,
-        log_transform_compress=1,
+        stimuli_format: StimuliFormat
     ):
         """
         Add a dataframe containing gammatone spectrograms for each
@@ -200,36 +194,19 @@ class DatasetBuilder:
         spectrogram. If `True`, each point on the spectrogram `x` will
         be transformed into `log(x + log_transform_compress) - log(x)`
         """
-        gammatone_params = {
-            "window_time": self._dataset.get_time_step() * window_scale,
-            "hop_time": self._dataset.get_time_step(),
-            "channels": frequency_bin_count,
-            "f_min": min_frequency,
-            "f_max": max_frequency,
-        }
-        if log_transform:
-            log_transform_params = {
-                "compress": log_transform_compress,
-            }
-        else:
-            log_transform_params = None
+        self._dataset.stimuli_format = stimuli_format
         wav_data = self.data_source.get_stimuli()
-        spectrograms = pd.Series({
-            k: self._spectrogram(v, log_transform_params, gammatone_params)
+        formatted_stimuli = pd.Series({
+            k: stimuli_format((k, v), self._dataset.get_time_step())
             for k, v in wav_data.items()
         })
         self._dataset.stimuli = pd.DataFrame()
-        self._dataset.stimuli["spectrogram"] = spectrograms
-        self._dataset.stimuli["stimulus.length"] = self._dataset.stimuli["spectrogram"].apply(lambda x: x.shape[0])
-
-    @staticmethod
-    def _spectrogram(wav_data, log_transform_params, gammatone_params):
-        sample_rate, samples = wav_data
-        spectrogram = mem.cache(gtgram)(samples, sample_rate, **gammatone_params)
-        if log_transform_params is not None:
-            compress = log_transform_params["compress"]
-            spectrogram = np.log10(spectrogram + compress) - np.log10(compress)
-        return spectrogram.T
+        if isinstance(stimuli_format, SameTimeIndexAsResponse):
+            self._dataset.stimuli["spectrogram"] = formatted_stimuli
+            self._dataset.stimuli["stimulus.length"] = \
+                    self._dataset.stimuli["spectrogram"].apply(lambda x: x.shape[0])
+        else:
+            self._dataset.stimuli[stimuli_format.__class__.__name__] = formatted_stimuli
 
     def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
         """
@@ -242,6 +219,7 @@ class DatasetBuilder:
         <!--
         >>> import asyncio
         >>> from preconstruct.sources import NeurobankSource
+        >>> from preconstruct.stimuliformats import Gammatone
         >>> responses = ['P120_1_1_c92']
         >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
         >>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
@@ -251,14 +229,7 @@ class DatasetBuilder:
         >>> builder.set_data_source(data_source)
         >>> builder.load_responses()
         >>> builder.bin_responses(time_step=0.005) # 5 ms
-        >>> builder.add_stimuli(
-        ...     window_scale=1,
-        ...     frequency_bin_count=50,
-        ...     min_frequency=500,
-        ...     max_frequency=8000,
-        ...     log_transform=True,
-        ...     log_transform_compress=1,
-        ... )
+        >>> builder.add_stimuli(Gammatone())
 
 
         -->
@@ -267,6 +238,8 @@ class DatasetBuilder:
 
 
         """
+        if not isinstance(self._dataset.stimuli_format, SameTimeIndexAsResponse):
+            raise IncompatibleStimuliFormat(self._dataset.stimuli_format)
         self.tau = tau
         self.basis = None
         if basis is not None:
@@ -331,6 +304,8 @@ class Dataset:
     """"""
     time_step: Optional[float]
     """granularity of time"""
+    stimuli_format: Optional[StimuliFormat]
+    """"""
 
     def __init__(self):
         pass
@@ -368,7 +343,7 @@ class Dataset:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
         except KeyError:
             stimuli_index = key
-        stimuli = np.concatenate(self.get_stimuli().loc[stimuli_index]["spectrogram"].values)
+        stimuli = self.stimuli_format.to_values(self.get_stimuli().loc[stimuli_index])
         return responses, stimuli
 
     def to_steps(self, time_in_seconds):
@@ -418,4 +393,16 @@ class InconsistentStimulusInterval(Exception):
         return (
                 "if you want to pool trials, every stimulus presentation must have"
                 " the same stimulus.interval"
+               )
+
+
+class IncompatibleStimuliFormat(Exception):
+    def __init__(self, format):
+        self.format = format
+
+    def __str__(self) -> str:
+        return (
+                f"the StimuliFormat you have picked ({self.format})"
+                " is not a subclass of `SameTimeIndexAsResponse`"
+                " so you can't call this function"
                )

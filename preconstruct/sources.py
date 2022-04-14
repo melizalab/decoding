@@ -73,6 +73,7 @@ class Pprox(TypedDict):
     """type annotation for a collection of trials"""
     pprox: List[Trial]
 
+Wav = Tuple[int, np.ndarray]
 
 class DataSource(ABC):
     """Abstract class for data sources to inherit from
@@ -100,7 +101,7 @@ class DataSource(ABC):
         return _fix_pprox(responses, durations)
 
     @abstractmethod
-    def get_stimuli(self) -> Dict[str, Tuple[int, np.ndarray]]:
+    def get_stimuli(self) -> Dict[str, Wav]:
         """returns dictionary mapping names of files to (sample_rate, samples) tuples"""
 
     def __eq__(self, other) -> bool:
@@ -163,10 +164,7 @@ class FsSource(DataSource):
             cluster_names=self.cluster_list,
         )
 
-    def get_stimuli(self) -> Dict[str, Tuple[int, np.ndarray]]:
-        return dataset.mem.cache(self._get_stimuli)()
-
-    def _get_stimuli(self) -> Dict[str, Tuple[int, np.ndarray]]:
+    def get_stimuli(self) -> Dict[str, Wav]:
         return self._load_stimuli(self.wav_path_format, self.stimuli_names)
 
     @staticmethod
