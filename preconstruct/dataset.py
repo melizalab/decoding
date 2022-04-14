@@ -358,11 +358,11 @@ class Dataset:
     def __getitem__(self, key):
         """
         get numpy arrays representing the responses and the stimuli
-        at the given pandas index range
+        at the given pandas index range. The array dimensions are (time, neuron, lag)
         """
         events = self.get_responses().loc[key]
         responses = np.concatenate(
-            [np.stack(x, axis=2) for x in events.values.tolist()]
+            [np.stack(x, axis=1) for x in events.values.tolist()]
         )
         try:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
