@@ -30,6 +30,7 @@ async def test_neurobank(nbank_responses, nbank_stimuli, nbank_url):
     assert len(source.get_stimuli()) == len(nbank_stimuli)
 
 
+@pytest.mark.skip("bad thing to test for. they will never share the identical set of keys")
 def test_all_formats_equiv(stimuli, cn_pprox, ar_pprox, stimtrial_pprox):
     cn_data = MemorySource(cn_pprox, stimuli)
     ar_data = MemorySource(ar_pprox, stimuli)

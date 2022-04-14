@@ -371,7 +371,7 @@ def _ar_data_shim(json_data, durations):
         if trial.get("units") == "ms":
             del trial["units"]
             trial["events"] = [x / 1000 for x in trial["events"]]
-        _rename_key(trial, "stim_uuid", "stim")
+        trial["stim"] = f"{trial['stimulus']}_{trial['condition']}"
         _rename_key(trial, "trial", "index")
         # we want to put the `interval` information in the cn_pprox format
         # so we list absolute recording start and stop with a sample rate of 1
