@@ -23,12 +23,43 @@ class StimuliFormat(ABC):
         """return array representation
         """
 
+    def create_dataframe(self, data_source, time_step) -> pd.DataFrame:
+        wav_data = data_source.get_stimuli()
+        formatted_stimuli = pd.Series({
+            k: self.format_from_wav((k, v), time_step)
+            for k, v in wav_data.items()
+        })
+        stimuli_df = pd.DataFrame()
+        stimuli_df["stimulus"] = formatted_stimuli
+        return stimuli_df
+
     def __call__(self, *args) -> np.ndarray:
         return self.format_from_wav(*args)
 
 class SameTimeIndexAsResponse(StimuliFormat):
+    """Abstract base class for stimuli formats that use the time index as the responses
+
+    In other words there is a 1 to 1 correspondence between time steps in the stimulus
+    and in the response.
+
+    Provides columns `"spectrogram"` and `"stimulus.length"`
+    """
     def to_values(self, stim_df) -> np.ndarray:
         return np.concatenate(stim_df["spectrogram"].values)
+
+    def create_dataframe(self, *args) -> pd.DataFrame:
+        stimuli_df = super().create_dataframe(*args)
+        stimuli_df = stimuli_df.rename(columns={"stimulus": "spectrogram"})
+        stimuli_df["stimulus.length"] = \
+                stimuli_df["spectrogram"].apply(lambda x: x.shape[0])
+        return stimuli_df
+
+
+    def __call__(self, *args) -> np.ndarray:
+        return self.format_from_wav(*args)
+
+
+
 
 class LogTransformable(StimuliFormat):
     def __init__(self, log_transform_compress: Optional[float] = None):
@@ -92,5 +123,4 @@ class Categorical(StimuliFormat):
         return name
 
     def to_values(self, stim_df) -> np.ndarray:
-        print(stim_df["Categorical"])
-        return pd.get_dummies(stim_df["Categorical"]).values
+        return pd.get_dummies(stim_df["stimulus"]).values

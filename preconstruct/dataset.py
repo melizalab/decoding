@@ -195,18 +195,10 @@ class DatasetBuilder:
         be transformed into `log(x + log_transform_compress) - log(x)`
         """
         self._dataset.stimuli_format = stimuli_format
-        wav_data = self.data_source.get_stimuli()
-        formatted_stimuli = pd.Series({
-            k: stimuli_format((k, v), self._dataset.get_time_step())
-            for k, v in wav_data.items()
-        })
-        self._dataset.stimuli = pd.DataFrame()
-        if isinstance(stimuli_format, SameTimeIndexAsResponse):
-            self._dataset.stimuli["spectrogram"] = formatted_stimuli
-            self._dataset.stimuli["stimulus.length"] = \
-                    self._dataset.stimuli["spectrogram"].apply(lambda x: x.shape[0])
-        else:
-            self._dataset.stimuli[stimuli_format.__class__.__name__] = formatted_stimuli
+        self._dataset.stimuli = stimuli_format.create_dataframe(
+                self.data_source,
+                self._dataset.get_time_step()
+        )
 
     def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
         """
@@ -312,22 +304,27 @@ class Dataset:
 
     def get_stimuli(self) -> pd.DataFrame:
         if self.stimuli is None:
-            raise InvalidConstructionSequence("must call `add_stimuli` first")
+            raise InvalidConstructionSequence("add_stimuli")
         return self.stimuli
+
+    def get_stimuli_format(self) -> StimuliFormat:
+        if self.stimuli_format is None:
+            raise InvalidConstructionSequence("add_stimuli")
+        return self.stimuli_format
 
     def get_time_step(self) -> float:
         if self.time_step is None:
-            raise InvalidConstructionSequence("must call `bin_responses` first")
+            raise InvalidConstructionSequence("bin_responses")
         return self.time_step
 
     def get_trial_data(self) -> pd.DataFrame:
         if self.trial_data is None:
-            raise InvalidConstructionSequence("must call `load_responses` first")
+            raise InvalidConstructionSequence("load_responses")
         return self.trial_data
 
     def get_responses(self) -> pd.DataFrame:
         if self.responses is None:
-            raise InvalidConstructionSequence("must call `load_responses` first")
+            raise InvalidConstructionSequence("load_responses")
         return self.responses
 
     def __getitem__(self, key):
@@ -337,13 +334,13 @@ class Dataset:
         """
         events = self.get_responses().loc[key]
         responses = np.concatenate(
-            [np.stack(x, axis=2) for x in events.values.tolist()]
+            [np.stack(np.atleast_3d(x), axis=2) for x in events.values.tolist()]
         )
         try:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
         except KeyError:
             stimuli_index = key
-        stimuli = self.stimuli_format.to_values(self.get_stimuli().loc[stimuli_index])
+        stimuli = self.get_stimuli_format().to_values(self.get_stimuli().loc[stimuli_index])
         return responses, stimuli
 
     def to_steps(self, time_in_seconds):
@@ -369,12 +366,12 @@ class _EmptySource(DataSource):
 class InvalidConstructionSequence(Exception):
     """Indicates that the methods of a DatasetBuilder have been called in an invalid order"""
 
-    def __init__(self, description):
+    def __init__(self, required_method):
         super().__init__()
-        self.description = description
+        self.required_method = required_method
 
     def __str__(self) -> str:
-        return f"invalid construction sequence: {self.description}"
+        return f"invalid construction sequence: must call `{self.required_method}` first"
 
 class IncompatibleTrialError(Exception):
     def __init__(self, trial_pair: Dict[str, pd.DataFrame]):
