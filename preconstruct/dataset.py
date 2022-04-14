@@ -334,7 +334,7 @@ class Dataset:
         """
         events = self.get_responses().loc[key]
         responses = np.concatenate(
-            [np.stack(np.atleast_3d(x), axis=2) for x in events.values.tolist()]
+            [np.stack(x, axis=-1) for x in events.values.tolist()]
         )
         try:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]

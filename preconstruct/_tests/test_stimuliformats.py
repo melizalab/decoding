@@ -22,5 +22,4 @@ def test_categorical(real_data_source):
     assert np.equal(np.sum(Y, axis=1), np.ones(100)).all()
     all_time_steps_across_all_trials = 91178
     n_neurons = 2
-    dummy = 1
-    assert X.shape == (all_time_steps_across_all_trials, dummy, n_neurons)
+    assert X.shape == (all_time_steps_across_all_trials, n_neurons)
