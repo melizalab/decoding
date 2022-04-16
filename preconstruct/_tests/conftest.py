@@ -57,6 +57,8 @@ def ar_pprox():
                     "units": "ms",
                     "event": [200, 1000, 1500],
                     "stim_uuid": "song_1",
+                    "stimulus": "song",
+                    "condition": 1,
                     "stim_on": 1,
                 }
             ],
