@@ -29,7 +29,7 @@ input into a neural decoding model
 
 APP_NAME = "preconstruct"
 APP_AUTHOR = "melizalab"
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 from preconstruct.dataset import Dataset, DatasetBuilder
 from preconstruct import basisfunctions
