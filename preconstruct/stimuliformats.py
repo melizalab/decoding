@@ -7,8 +7,8 @@ from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 from scipy import signal
+from gammatone.gtgram import gtgram
 
-from preconstruct.gammatone.gtgram import gtgram
 from preconstruct.sources import Wav
 from preconstruct import _mem
 
