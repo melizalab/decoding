@@ -78,7 +78,7 @@ Let's use our dataset to perform a simple neural decoding task
 >>> import numpy as np
 >>> training_stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09']
 >>> test_stimuli = set(dataset.responses.index).difference(training_stimuli)
->>> X, Y = dataset[training_stimuli]
+>>> X, Y = dataset[list(training_stimuli)]
 >>> X.shape, Y.shape
 ((2476, 2, 60), (2476, 50))
 >>> X = np.resize(X, (X.shape[0], X.shape[1] * X.shape[2]))
@@ -87,7 +87,7 @@ Let's use our dataset to perform a simple neural decoding task
 Ridge()
 >>> model.score(X, Y)
 0.30159992
->>> X_test, Y_test = dataset[test_stimuli]
+>>> X_test, Y_test = dataset[list(test_stimuli)]
 >>> X_test = np.resize(X_test, (X_test.shape[0], X_test.shape[1] * X_test.shape[2]))
 >>> model.score(X_test, Y_test)
 0.15341238
@@ -100,9 +100,9 @@ import pandas as pd
 from joblib import Memory
 from appdirs import user_cache_dir
 from scipy.linalg import hankel
+from gammatone.gtgram import gtgram
 
 import preconstruct
-from preconstruct.gammatone.gtgram import gtgram
 from preconstruct.sources import DataSource
 from preconstruct.basisfunctions import Basis
 

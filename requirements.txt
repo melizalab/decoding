@@ -20,6 +20,8 @@ frozenlist==1.3.0
     # via
     #   aiohttp
     #   aiosignal
+gammatone @ https://github.com/melizalab/gammatone/archive/refs/tags/0.1.0.zip
+    # via preconstruct (setup.cfg)
 idna==3.3
     # via yarl
 joblib==1.1.0
@@ -30,6 +32,7 @@ multidict==6.0.2
     #   yarl
 numpy==1.22.3
     # via
+    #   gammatone
     #   pandas
     #   preconstruct (setup.cfg)
     #   scipy
@@ -42,7 +45,9 @@ python-dateutil==2.8.2
 pytz==2022.1
     # via pandas
 scipy==1.8.0
-    # via preconstruct (setup.cfg)
+    # via
+    #   gammatone
+    #   preconstruct (setup.cfg)
 six==1.16.0
     # via python-dateutil
 yarl==1.7.2
