@@ -153,9 +153,18 @@ class FsSource(DataSource):
         if not isinstance(wav_path_format, str):
             wav_path_format = str(wav_path_format)
         self.pprox_path_format = pprox_path_format
-        self.cluster_list = cluster_list
+        self.cluster_list = self._get_list(cluster_list)
         self.wav_path_format = wav_path_format
         self.stimuli_names = stimuli_names
+
+    @staticmethod
+    def _get_list(resource_ids):
+        if isinstance(resource_ids, list):
+            return resource_ids
+        if isinstance(resource_ids, str):
+            with open(resource_ids, "r") as fd:
+                return fd.read().splitlines()
+        raise ValueError("input should be a list or a filename")
 
     def _get_raw_responses(self):
         return self._load_pprox(
