@@ -122,7 +122,6 @@ async def test_margot_data():
     training_stimuli = stimuli
     print(builder._dataset.responses)
     X, Y = dataset[training_stimuli]
-    X = np.resize(X, (X.shape[0], X.shape[1] * X.shape[2]))
     print("X.shape:", X.shape)
     print("Y.shape:", Y.shape)
     estimator = Ridge(alpha=8.59)

@@ -136,15 +136,24 @@ class _IncompleteDataset:
             raise InvalidConstructionSequence("must call `load_responses` first")
         return self.responses
 
+    def get_response_matrix(self, key, flatten=True):
+        """ get a response matrix for all the stimuli in key """
+        events = self.get_responses().loc[key]
+        X = np.concatenate(
+            [np.stack(x, axis=1) for x in events.values.tolist()]
+        )
+        if flatten:
+            X = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2]))
+        return X
+
     def __getitem__(self, key):
         """
         get numpy arrays representing the responses and the stimuli
-        at the given pandas index range. The array dimensions are (time, neuron, lag)
+        at the given pandas index range. The array dimensions are (time, neuron * lag)
+
+        If neurons and lags need to be in separate dimensions, use get_response_matrix with flatten=False.
         """
-        events = self.get_responses().loc[key]
-        responses = np.concatenate(
-            [np.stack(x, axis=1) for x in events.values.tolist()]
-        )
+        responses = self.get_response_matrix(key, flatten=True)
         try:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
         except KeyError:
