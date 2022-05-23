@@ -124,7 +124,7 @@ class DataSource(ABC):
                 yield trial["stimulus"]["name"]
 
 
-IdentiferCollection = Union[str, Path, List[str]]
+IdentifierCollection = Union[str, Path, List[str]]
 """
 a list of resource IDs, or path to a file containing such a list
 """
@@ -137,8 +137,8 @@ class FsSource(DataSource):
         self,
         responses: Union[str, Path],
         stimuli: Union[str, Path],
-        stimuli_names: Optional[IdentiferCollection] = None,
-        cluster_list: Optional[IdentiferCollection] = None,
+        stimuli_names: Optional[IdentifierCollection] = None,
+        cluster_list: Optional[IdentifierCollection] = None,
     ):
         """initialize with path to data
 
@@ -153,9 +153,9 @@ class FsSource(DataSource):
 
         `stimuli`: e.g. `'wav/{}.wav'`
 
-        `cluster_list`: optional `IdentiferCollection`, defaults to all files present
+        `cluster_list`: optional `IdentifierCollection`, defaults to all files present
 
-        `stimuli_names`: optional `IdentiferCollection`, defaults to all files present
+        `stimuli_names`: optional `IdentifierCollection`, defaults to all files present
         """
         if not isinstance(responses, str):
             responses = str(responses)
@@ -167,7 +167,7 @@ class FsSource(DataSource):
         self.stimuli_names = self._into_list(stimuli_names)
 
     @staticmethod
-    def _into_list(resource_ids: IdentiferCollection | None) -> List[str] | None:
+    def _into_list(resource_ids: Optional[IdentifierCollection]) -> Optional[List[str]]:
         if resource_ids is None:
             return None
         if isinstance(resource_ids, list):
@@ -175,7 +175,7 @@ class FsSource(DataSource):
         if isinstance(resource_ids, (str, Path)):
             with open(resource_ids, "r") as fd:
                 return fd.read().splitlines()
-        raise ValueError("input should be an IdentiferCollection")
+        raise ValueError("input should be an IdentifierCollection")
 
     def _get_raw_responses(self):
         return self._load_pprox(
@@ -273,8 +273,8 @@ class NeurobankSource(FsSource):
     async def create(
         cls,
         neurobank_registry: str,
-        wav_ids: IdentiferCollection,
-        pprox_ids: IdentiferCollection,
+        wav_ids: IdentifierCollection,
+        pprox_ids: IdentifierCollection,
     ):
         """
         `neurobank_registry`: URL of Neurobank instance
