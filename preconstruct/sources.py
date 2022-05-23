@@ -38,8 +38,7 @@ P120_1_1_c92: 100
 """
 import asyncio
 from collections import defaultdict
-from typing import Dict, List, Tuple, Optional, Generator, Union, \
-        TypedDict, Set
+from typing import Dict, List, Tuple, Optional, Generator, Union, TypedDict, Set
 from abc import ABC, abstractmethod
 from pathlib import Path
 from glob import glob
@@ -54,23 +53,28 @@ from appdirs import user_cache_dir
 
 
 from preconstruct import APP_NAME, APP_AUTHOR
-from . import dataset
+
 
 class StimConfig(TypedDict):
     """type annotation for information about a stimulus presentation"""
+
     name: str
     interval: Tuple[float]
 
+
 class Trial(TypedDict):
     """type annotation for a trial"""
+
     events: List[float]
     interval: Tuple[float]
     stimulus: StimConfig
     offset: Optional[float]
     index: Optional[int]
 
+
 class Pprox(TypedDict):
     """type annotation for a collection of trials"""
+
     pprox: List[Trial]
 
 
@@ -112,17 +116,16 @@ class DataSource(ABC):
         """returns a set of all stimuli used in the responses"""
         return set(self._stimuli_generator())
 
-
     def _stimuli_generator(self) -> Generator[str, None, None]:
         durations = defaultdict(lambda: 0.0)
         responses = _fix_pprox(self._get_raw_responses(), durations)
         for pprox in responses.values():
-            for trial in pprox['pprox']:
-                yield trial['stimulus']['name']
+            for trial in pprox["pprox"]:
+                yield trial["stimulus"]["name"]
 
 
 class FsSource(DataSource):
-    """Loads data from local File System (FS) """
+    """Loads data from local File System (FS)"""
 
     def __init__(
         self,
@@ -173,9 +176,6 @@ class FsSource(DataSource):
         )
 
     def get_stimuli(self) -> Dict[str, Tuple[int, np.ndarray]]:
-        return dataset.mem.cache(self._get_stimuli)()
-
-    def _get_stimuli(self) -> Dict[str, Tuple[int, np.ndarray]]:
         return self._load_stimuli(self.wav_path_format, self.stimuli_names)
 
     @staticmethod
@@ -212,8 +212,8 @@ class FsSource(DataSource):
                     json_data = json.load(pprox_file)
                 except UnicodeDecodeError as exc:
                     raise ValueError(
-                            "could not load pprox files as text data"
-                            " (are you putting stimuli where responses should go?)"
+                        "could not load pprox files as text data"
+                        " (are you putting stimuli where responses should go?)"
                     ) from exc
                 clusters[name] = json_data
         return clusters
