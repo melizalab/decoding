@@ -4,20 +4,30 @@ import numpy as np
 from preconstruct import DatasetBuilder
 from preconstruct.sources import NeurobankSource, MemorySource
 
+
 @pytest.fixture
 def mem_data_source(stimtrial_pprox, stimuli):
     responses = stimtrial_pprox
     return MemorySource(responses, stimuli)
 
+
 @pytest.fixture
 async def real_data_source():
-    responses = ['P120_1_1_c92', 'P120_1_1_c89']
-    stimuli = \
-    ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09', \
-    'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
-    url = 'https://gracula.psyc.virginia.edu/neurobank/'
+    responses = ["P120_1_1_c92", "P120_1_1_c89"]
+    stimuli = [
+        "c95zqjxq",
+        "g29wxi4q",
+        "igmi8fxa",
+        "jkexyrd5",
+        "l1a3ltpy",
+        "mrel2o09",
+        "p1mrfhop",
+        "vekibwgj",
+        "w08e1crn",
+        "ztqee46x",
+    ]
+    url = "https://gracula.psyc.virginia.edu/neurobank/"
     return await NeurobankSource.create(url, stimuli, responses)
-
 
 
 def test_building(mem_data_source):
@@ -41,11 +51,13 @@ def test_building(mem_data_source):
     builder.add_stimuli()
     print(builder._dataset.get_responses().columns)
     spectrogram = builder._dataset.get_stimuli()["spectrogram"].loc[stimulus["name"]]
-    spectrogram_length= spectrogram.shape[0]
-    stim_length = builder._dataset.get_stimuli()["stimulus.length"].loc[stimulus["name"]]
+    spectrogram_length = spectrogram.shape[0]
+    stim_length = builder._dataset.get_stimuli()["stimulus.length"].loc[
+        stimulus["name"]
+    ]
     assert spectrogram_length == stim_length
 
-    tau=0.3
+    tau = 0.3
     builder.create_time_lags(tau=tau)
     actual_lagged = builder._dataset.get_responses()[neuron].loc[trial_index]
     print(spectrogram)
@@ -67,8 +79,9 @@ def test_pool_trials(mem_data_source):
     builder.pool_trials()
     assert builder._dataset.get_responses().columns == neurons
     dataset = builder.get_dataset()
-    X, Y = dataset[['song_1']]
+    X, Y = dataset[["song_1"]]
     assert len(X) == len(Y)
+
 
 def test_pool_trials_before_lag(real_data_source):
     builder = DatasetBuilder()
@@ -88,14 +101,21 @@ def test_pool_trials_before_lag(real_data_source):
     builder.create_time_lags()
     builder.pool_trials()
     dataset_pool_second = builder.get_dataset()
-    assert np.all([np.array_equal(a, b) for a, b in zip(dataset_pool_first[:], dataset_pool_second[:])])
+    assert np.all(
+        [
+            np.array_equal(a, b)
+            for a, b in zip(dataset_pool_first[:], dataset_pool_second[:])
+        ]
+    )
+
 
 async def test_margot_data():
     from preconstruct import sources, dataset, basisfunctions
     from sklearn.linear_model import RidgeCV, Ridge
-    responses = ['P4_p1r2_ch20_c31','O129_p1r2_ch19_c3','P4_p1r2_ch22_c23']
+
+    responses = ["P4_p1r2_ch20_c31", "O129_p1r2_ch19_c3", "P4_p1r2_ch22_c23"]
     stimuli = []
-    url = 'https://gracula.psyc.virginia.edu/neurobank/'
+    url = "https://gracula.psyc.virginia.edu/neurobank/"
     test_source = await (sources.NeurobankSource.create(url, stimuli, responses))
     stimuli = list(test_source.stimuli_names_from_pprox())
     data_source = await (sources.NeurobankSource.create(url, stimuli, responses))
@@ -104,15 +124,15 @@ async def test_margot_data():
     print("loading responses")
     builder.load_responses(ignore_columns=["category"])
     print("binning responses")
-    builder.bin_responses(time_step=0.001) # 5 ms
+    builder.bin_responses(time_step=0.001)  # 5 ms
     print("computing spectrograms")
     builder.add_stimuli(
-         window_scale=2.5,
-         frequency_bin_count=30,
-         min_frequency=500,
-         max_frequency=8000,
-         log_transform=True,
-         log_transform_compress=1,
+        window_scale=2.5,
+        frequency_bin_count=30,
+        min_frequency=500,
+        max_frequency=8000,
+        log_transform=True,
+        log_transform_compress=1,
     )
     basis = basisfunctions.RaisedCosineBasis(30, linearity_factor=30)
     print("creating design matrices")

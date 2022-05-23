@@ -124,15 +124,21 @@ class DataSource(ABC):
                 yield trial["stimulus"]["name"]
 
 
+IdentiferCollection = Union[str, Path, List[str]]
+"""
+a list of resource IDs, or path to a file containing such a list
+"""
+
+
 class FsSource(DataSource):
     """Loads data from local File System (FS)"""
 
     def __init__(
         self,
-        pprox_path_format: Union[str, Path],
-        wav_path_format: Union[str, Path],
-        stimuli_names: Optional[List[str]] = None,
-        cluster_list: Optional[List[str]] = None,
+        responses: Union[str, Path],
+        stimuli: Union[str, Path],
+        stimuli_names: Optional[IdentiferCollection] = None,
+        cluster_list: Optional[IdentiferCollection] = None,
     ):
         """initialize with path to data
 
@@ -143,40 +149,42 @@ class FsSource(DataSource):
         is not specified, the wildcard `*` will be substituted for `{}` to load
         all matching files.
 
-        `pprox_path_format`: e.g. `'pprox/P120_1_1_{}.pprox'`
+        `responses`: e.g. `'pprox/P120_1_1_{}.pprox'`
 
-        `wav_path_format`: e.g. `'wav/{}.wav'`
+        `stimuli`: e.g. `'wav/{}.wav'`
 
-        `cluster_list`: optional list of response identifiers to load
+        `cluster_list`: optional `IdentiferCollection`, defaults to all files present
 
-        `stimuli_names`: optional list of stimuli identifiers to load
+        `stimuli_names`: optional `IdentiferCollection`, defaults to all files present
         """
-        if not isinstance(pprox_path_format, str):
-            pprox_path_format = str(pprox_path_format)
-        if not isinstance(wav_path_format, str):
-            wav_path_format = str(wav_path_format)
-        self.pprox_path_format = pprox_path_format
-        self.cluster_list = self._get_list(cluster_list)
-        self.wav_path_format = wav_path_format
-        self.stimuli_names = stimuli_names
+        if not isinstance(responses, str):
+            responses = str(responses)
+        if not isinstance(stimuli, str):
+            stimuli = str(stimuli)
+        self.responses = responses
+        self.cluster_list = self._into_list(cluster_list)
+        self.stimuli = stimuli
+        self.stimuli_names = self._into_list(stimuli_names)
 
     @staticmethod
-    def _get_list(resource_ids):
+    def _into_list(resource_ids: IdentiferCollection | None) -> List[str] | None:
+        if resource_ids is None:
+            return None
         if isinstance(resource_ids, list):
             return resource_ids
-        if isinstance(resource_ids, str):
+        if isinstance(resource_ids, (str, Path)):
             with open(resource_ids, "r") as fd:
                 return fd.read().splitlines()
-        raise ValueError("input should be a list or a filename")
+        raise ValueError("input should be an IdentiferCollection")
 
     def _get_raw_responses(self):
         return self._load_pprox(
-            self.pprox_path_format,
+            self.responses,
             cluster_names=self.cluster_list,
         )
 
     def get_stimuli(self) -> Dict[str, Tuple[int, np.ndarray]]:
-        return self._load_stimuli(self.wav_path_format, self.stimuli_names)
+        return self._load_stimuli(self.stimuli, self.stimuli_names)
 
     @staticmethod
     def _load_stimuli(path_format, stimuli_names=None):
@@ -221,7 +229,7 @@ class FsSource(DataSource):
     @staticmethod
     def _get_filenames(path_format, names):
         assert path_format.find("{}") != -1, (
-            "path_format should include empty braces where a wildcard"
+            "paths should include empty braces where a wildcard"
             " would go.\n"
             'For example, "{}.pprox" will load all files in the current'
             ' directory that end in ".pprox". The contents of each file'
@@ -262,19 +270,21 @@ class NeurobankSource(FsSource):
     _DOWNLOAD_FORMAT = "resources/{}/download"
 
     @classmethod
-    async def create(cls, neurobank_registry: str, wav_ids, pprox_ids):
+    async def create(
+        cls,
+        neurobank_registry: str,
+        wav_ids: IdentiferCollection,
+        pprox_ids: IdentiferCollection,
+    ):
         """
         `neurobank_registry`: URL of Neurobank instance
-
-        both `pprox_ids` and `wav_ids` may either be a
-        list of resource IDs, or path to a file containing such a list
         """
         url_format = urljoin(neurobank_registry, cls._DOWNLOAD_FORMAT)
-        pprox_ids = cls._get_list(pprox_ids)
-        wav_ids = cls._get_list(wav_ids)
+        pprox_ids_ = cls._into_list(pprox_ids)
+        wav_ids_ = cls._into_list(wav_ids)
         parsed_url = urlparse(neurobank_registry)
         cache_dir = Path(user_cache_dir(APP_NAME, APP_AUTHOR)) / parsed_url.netloc
-        self = NeurobankSource(url_format, pprox_ids, wav_ids, cache_dir)
+        self = NeurobankSource(url_format, pprox_ids_, wav_ids_, cache_dir)
         responses_dir = self.cache_dir / "responses"
         stimuli_dir = self.cache_dir / "stimuli"
         responses_dir.mkdir(parents=True, exist_ok=True)
@@ -296,15 +306,6 @@ class NeurobankSource(FsSource):
         self.pprox_ids = pprox_ids
         self.wav_ids = wav_ids
         self.cache_dir = cache_dir
-
-    @staticmethod
-    def _get_list(resource_ids):
-        if isinstance(resource_ids, list):
-            return resource_ids
-        if isinstance(resource_ids, str):
-            with open(resource_ids, "r") as fd:
-                return fd.read().splitlines()
-        raise ValueError("input should be a list or a filename")
 
     async def _download(self, resource_id, session, folder):
         url = self.url_format.format(resource_id)
