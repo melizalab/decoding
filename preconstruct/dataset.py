@@ -80,15 +80,13 @@ Let's use our dataset to perform a simple neural decoding task
 >>> test_stimuli = set(dataset.responses.index).difference(training_stimuli)
 >>> X, Y = dataset[list(training_stimuli)]
 >>> X.shape, Y.shape
-((2476, 2, 60), (2476, 50))
->>> X = np.resize(X, (X.shape[0], X.shape[1] * X.shape[2]))
+((2476, 120), (2476, 50))
 >>> model = Ridge(alpha=1.0)
 >>> model.fit(X, Y)
 Ridge()
 >>> model.score(X, Y)
 0.30159992
 >>> X_test, Y_test = dataset[list(test_stimuli)]
->>> X_test = np.resize(X_test, (X_test.shape[0], X_test.shape[1] * X_test.shape[2]))
 >>> model.score(X_test, Y_test)
 0.15341238
 
@@ -137,11 +135,9 @@ class _IncompleteDataset:
         return self.responses
 
     def get_response_matrix(self, key, flatten=True):
-        """ get a response matrix for all the stimuli in key """
+        """get a response matrix for all the stimuli in key"""
         events = self.get_responses().loc[key]
-        X = np.concatenate(
-            [np.stack(x, axis=1) for x in events.values.tolist()]
-        )
+        X = np.concatenate([np.stack(x, axis=1) for x in events.values.tolist()])
         if flatten:
             X = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2]))
         return X
@@ -158,7 +154,9 @@ class _IncompleteDataset:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
         except KeyError:
             stimuli_index = key
-        stimuli = np.concatenate(self.get_stimuli().loc[stimuli_index]["spectrogram"].values)
+        stimuli = np.concatenate(
+            self.get_stimuli().loc[stimuli_index]["spectrogram"].values
+        )
         return responses, stimuli
 
     def to_steps(self, time_in_seconds):
@@ -210,12 +208,13 @@ class Dataset(_IncompleteDataset):
                dtype='int64', name='index')
     >>> X, Y = dataset[20:30]
     >>> X.shape
-    (4600, 1, 60)
+    (4600, 60)
     >>> Y.shape
     (4600, 50)
 
     You can also manually select directly from the DataFrames.
     """
+
     responses: pd.DataFrame
     """Columns correspond to pprox files
     """
@@ -273,7 +272,9 @@ class DatasetBuilder:
         self._dataset.trial_data = trial_data
 
     @staticmethod
-    def _aggregate_trials(trial_data: pd.DataFrame) -> Optional[Tuple[str, pd.DataFrame]]:
+    def _aggregate_trials(
+        trial_data: pd.DataFrame,
+    ) -> Optional[Tuple[str, pd.DataFrame]]:
         """if all trials contain the same data, return one trial
         otherwise, raise a IncompatibleTrialError
         """
@@ -294,9 +295,11 @@ class DatasetBuilder:
         the number of events that occurred within that time bin.
         """
         self._dataset.time_step = time_step
-        self._dataset.responses = self._dataset.get_responses().apply(lambda neuron: \
-              self._dataset.get_trial_data().join(neuron.rename("events")).apply(self._hist, axis=1)
-          )
+        self._dataset.responses = self._dataset.get_responses().apply(
+            lambda neuron: self._dataset.get_trial_data()
+            .join(neuron.rename("events"))
+            .apply(self._hist, axis=1)
+        )
 
     def _hist(self, row) -> np.ndarray:
         start, stop = row["interval"]
@@ -339,13 +342,17 @@ class DatasetBuilder:
         else:
             log_transform_params = None
         wav_data = self.data_source.get_stimuli()
-        spectrograms = pd.Series({
-            k: self._spectrogram(v, log_transform_params, gammatone_params)
-            for k, v in wav_data.items()
-        })
+        spectrograms = pd.Series(
+            {
+                k: self._spectrogram(v, log_transform_params, gammatone_params)
+                for k, v in wav_data.items()
+            }
+        )
         self._dataset.stimuli = pd.DataFrame()
         self._dataset.stimuli["spectrogram"] = spectrograms
-        self._dataset.stimuli["stimulus.length"] = self._dataset.stimuli["spectrogram"].apply(lambda x: x.shape[0])
+        self._dataset.stimuli["stimulus.length"] = self._dataset.stimuli[
+            "spectrogram"
+        ].apply(lambda x: x.shape[0])
 
     @staticmethod
     def _spectrogram(wav_data, log_transform_params, gammatone_params):
@@ -397,22 +404,24 @@ class DatasetBuilder:
         if basis is not None:
             window_length = self._dataset.to_steps(self.tau)
             self.basis = basis.get_basis(window_length)
-        self._dataset.responses = self._dataset.get_responses() \
-        .apply(lambda neuron:
-            self._dataset.get_trial_data()[["stimulus.interval", "stimulus.name"]] \
-                .join(neuron.rename("events"), on=neuron.index.name) \
-                .groupby(neuron.index.name).agg("first") \
-                .reset_index() \
-                .join(self._dataset.get_stimuli()["stimulus.length"], on='stimulus.name') \
-                .set_index(neuron.index.name) \
-                .apply(self._stagger, axis=1)
+        self._dataset.responses = self._dataset.get_responses().apply(
+            lambda neuron: self._dataset.get_trial_data()[
+                ["stimulus.interval", "stimulus.name"]
+            ]
+            .join(neuron.rename("events"), on=neuron.index.name)
+            .groupby(neuron.index.name)
+            .agg("first")
+            .reset_index()
+            .join(self._dataset.get_stimuli()["stimulus.length"], on="stimulus.name")
+            .set_index(neuron.index.name)
+            .apply(self._stagger, axis=1)
         )
 
     def _stagger(self, row):
         stim_start, _ = row["stimulus.interval"]
         start = self._dataset.to_steps(stim_start)
         window_length = self._dataset.to_steps(self.tau)
-        stop = start + row['stimulus.length']
+        stop = start + row["stimulus.length"]
         events = row["events"]
         assert len(events) >= stop - 1 + window_length
         time_lagged = hankel(
@@ -425,13 +434,19 @@ class DatasetBuilder:
     def pool_trials(self):
         """Pool spikes across trials"""
         neurons = self._dataset.get_responses().columns
-        if not self._dataset.get_trial_data() \
-            .groupby("stimulus.name")["stimulus.interval"] \
-            .apply(lambda ser: len(ser.unique()) == 1).all():
+        if (
+            not self._dataset.get_trial_data()
+            .groupby("stimulus.name")["stimulus.interval"]
+            .apply(lambda ser: len(ser.unique()) == 1)
+            .all()
+        ):
             raise InconsistentStimulusInterval
-        self._dataset.responses = self._dataset.get_responses().join(self._dataset.get_trial_data()) \
-            .groupby("stimulus.name") \
+        self._dataset.responses = (
+            self._dataset.get_responses()
+            .join(self._dataset.get_trial_data())
+            .groupby("stimulus.name")
             .agg({n: self._trim_to_shortest_and_sum for n in neurons})[neurons]
+        )
 
     @staticmethod
     def _trim_to_shortest_and_sum(ser: pd.Series) -> pd.Series:
@@ -443,11 +458,12 @@ class DatasetBuilder:
         dataset = self._dataset
         dataset.responses = dataset.get_responses().sort_index()
         return Dataset(
-                dataset.get_stimuli(),
-                dataset.get_responses(),
-                dataset.get_trial_data(),
-                dataset.get_time_step(),
+            dataset.get_stimuli(),
+            dataset.get_responses(),
+            dataset.get_trial_data(),
+            dataset.get_time_step(),
         )
+
 
 class _EmptySource(DataSource):
     def _get_raw_responses(self):
@@ -474,6 +490,7 @@ class InvalidConstructionSequence(Exception):
     def __str__(self) -> str:
         return f"invalid construction sequence: {self.description}"
 
+
 class IncompatibleTrialError(Exception):
     """Raised when corresponding trials from different pprox files differ
 
@@ -481,6 +498,7 @@ class IncompatibleTrialError(Exception):
     specific keys using the `ignore_columns` argument in
     `DatasetBuilder.load_responses`.
     """
+
     def __init__(self, trial_pair: Dict[str, pd.DataFrame]):
         super().__init__()
         self.trial_pair = trial_pair
@@ -490,13 +508,14 @@ class IncompatibleTrialError(Exception):
         return (
             f"at least two trials contained conflicting data: {a}, {b}\n"
             f"{self.trial_pair[a].compare(self.trial_pair[b])}"
-            )
+        )
+
 
 class InconsistentStimulusInterval(Exception):
-    """Raised when stimulus.interval differs between trials that are to be combined
-    """
+    """Raised when stimulus.interval differs between trials that are to be combined"""
+
     def __str__(self) -> str:
         return (
-                "if you want to pool trials, every stimulus presentation must have"
-                " the same stimulus.interval"
-               )
+            "if you want to pool trials, every stimulus presentation must have"
+            " the same stimulus.interval"
+        )
