@@ -34,6 +34,14 @@ async def test_neurobank(nbank_responses, nbank_stimuli, nbank_url):
     assert len(source.get_stimuli()) == len(nbank_stimuli)
 
 
+async def test_neurobank_autonames(nbank_responses, nbank_stimuli, nbank_url):
+    source = await NeurobankSource.create(
+        nbank_url, [], nbank_responses, infer_stimuli=True
+    )
+    assert len(source.get_responses()) == 1
+    assert len(source.get_stimuli()) == len(nbank_stimuli)
+
+
 async def test_neurobank_from_file(nbank_responses, nbank_stimuli, nbank_url, tmp_path):
     stim_file = tmp_path / "stims"
     stim_file.write_text("\n".join(nbank_stimuli))

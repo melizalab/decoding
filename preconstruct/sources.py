@@ -275,9 +275,11 @@ class NeurobankSource(FsSource):
         neurobank_registry: str,
         wav_ids: IdentifierCollection,
         pprox_ids: IdentifierCollection,
+        infer_stimuli=False,
     ):
         """
         `neurobank_registry`: URL of Neurobank instance
+        `infer_stimuli`: whether to use stimuli names inferred from the responses
         """
         url_format = urljoin(neurobank_registry, cls._DOWNLOAD_FORMAT)
         pprox_ids_ = cls._into_list(pprox_ids)
@@ -297,6 +299,10 @@ class NeurobankSource(FsSource):
             cluster_list=self.pprox_ids,
             stimuli_names=self.wav_ids,
         )
+        if infer_stimuli:
+            self.wav_ids = list(self.stimuli_names_from_pprox())
+            self.stimuli_names = self.wav_ids
+            await self._download_stimuli()
         return self
 
     def __init__(self, url_format, pprox_ids, wav_ids, cache_dir):
@@ -318,9 +324,17 @@ class NeurobankSource(FsSource):
                     fd.write(chunk)
 
     async def _download_all(self):
+        await asyncio.gather(self._download_responses(), self._download_stimuli())
+
+    async def _download_responses(self):
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             await asyncio.gather(
                 *[self._download(url, session, "responses") for url in self.pprox_ids],
+            )
+
+    async def _download_stimuli(self):
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            await asyncio.gather(
                 *[self._download(url, session, "stimuli") for url in self.wav_ids],
             )
 
