@@ -401,8 +401,8 @@ def _ar_data_shim(json_data, durations):
         # we want to put the `interval` information in the cn_pprox format
         # so we list absolute recording start and stop with a sample rate of 1
         trial["recording"] = {
-            "start": 0,
-            "stop": trial["stim_on"] + durations[trial["stim"]] + 1,
+            "start": -0.5,
+            "stop": trial["stim_on"] + durations[trial["stim"]] + 0.5,
         }
     json_data["entry_metadata"] = {"sampling_rate": 1}
     del json_data["experiment"]
