@@ -3,6 +3,7 @@ import numpy as np
 
 from preconstruct import DatasetBuilder
 from preconstruct.sources import NeurobankSource, MemorySource
+from preconstruct.stimuliformats import Gammatone
 
 
 @pytest.fixture
@@ -48,9 +49,9 @@ def test_building(mem_data_source):
     assert actual_binned.shape == binned.shape
     assert np.array_equiv(binned, actual_binned)
 
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     print(builder._dataset.get_responses().columns)
-    spectrogram = builder._dataset.get_stimuli()["spectrogram"].loc[stimulus["name"]]
+    spectrogram = builder._dataset.get_stimuli()["stimulus"].loc[stimulus["name"]]
     spectrogram_length = spectrogram.shape[0]
     stim_length = builder._dataset.get_stimuli()["stimulus.length"].loc[
         stimulus["name"]
@@ -73,7 +74,7 @@ def test_pool_trials(mem_data_source):
     builder.set_data_source(mem_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     builder.create_time_lags()
     neurons = builder._dataset.get_responses().columns
     builder.pool_trials()
@@ -88,7 +89,7 @@ def test_pool_trials_before_lag(real_data_source):
     builder.set_data_source(real_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     builder.pool_trials()
     builder.create_time_lags()
     dataset_pool_first = builder.get_dataset()
@@ -97,7 +98,7 @@ def test_pool_trials_before_lag(real_data_source):
     builder.set_data_source(real_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli()
+    builder.add_stimuli(Gammatone())
     builder.create_time_lags()
     builder.pool_trials()
     dataset_pool_second = builder.get_dataset()
@@ -127,12 +128,13 @@ async def test_margot_data():
     builder.bin_responses(time_step=0.001)  # 5 ms
     print("computing spectrograms")
     builder.add_stimuli(
-        window_scale=2.5,
-        frequency_bin_count=30,
-        min_frequency=500,
-        max_frequency=8000,
-        log_transform=True,
-        log_transform_compress=1,
+        Gammatone(
+            window_time=0.0025,
+            frequency_bin_count=30,
+            min_frequency=500,
+            max_frequency=8000,
+            log_transform_compress=1,
+        )
     )
     basis = basisfunctions.RaisedCosineBasis(30, linearity_factor=30)
     print("creating design matrices")

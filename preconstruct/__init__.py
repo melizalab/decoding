@@ -26,10 +26,16 @@ bins containing the count of spikes occuring within the corresponding time windo
 - Rearrange the binned pprox data into windows of a given duration `tau` for
 input into a neural decoding model
 """
+from joblib import Memory
+from appdirs import user_cache_dir
 
 APP_NAME = "preconstruct"
 APP_AUTHOR = "melizalab"
 __version__ = "0.1.3"
+
+
+_cache_dir = user_cache_dir(APP_NAME, APP_AUTHOR)
+_mem = Memory(_cache_dir, verbose=0)
 
 from preconstruct.dataset import Dataset, DatasetBuilder
 from preconstruct import basisfunctions

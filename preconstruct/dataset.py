@@ -43,13 +43,15 @@ The unit for this argument and all other time values will be seconds.
 Next, we load the stimuli. We must choose parameters to control how the gammatone
 spectrograms are generated. Consult DatasetBuilder.add_stimuli for details on each
 argument.
+>>> from preconstruct.stimuliformats import Gammatone
 >>> builder.add_stimuli(
-...     window_scale=1.0,
-...     frequency_bin_count=50,
-...     min_frequency=500,
-...     max_frequency=8000,
-...     log_transform=True,
-...     log_transform_compress=1,
+...     Gammatone(
+...         window_time=0.005,
+...         frequency_bin_count=50,
+...         min_frequency=500,
+...         max_frequency=8000,
+...         log_transform_compress=1,
+...     )
 ... )
 
 Now we will convert the binned spikes into a lagged matrix, with a with a window
@@ -95,17 +97,11 @@ from typing import List, Optional, Dict, Tuple
 
 import numpy as np
 import pandas as pd
-from joblib import Memory
-from appdirs import user_cache_dir
 from scipy.linalg import hankel
-from gammatone.gtgram import gtgram
 
-import preconstruct
 from preconstruct.sources import DataSource
 from preconstruct.basisfunctions import Basis
-
-_cache_dir = user_cache_dir(preconstruct.APP_NAME, preconstruct.APP_AUTHOR)
-mem = Memory(_cache_dir, verbose=0)
+from preconstruct.stimuliformats import StimuliFormat
 
 
 class _IncompleteDataset:
@@ -113,25 +109,26 @@ class _IncompleteDataset:
     stimuli: Optional[pd.DataFrame]
     trial_data: Optional[pd.DataFrame]
     time_step: Optional[float]
+    stimuli_format: Optional[StimuliFormat]
 
     def get_stimuli(self) -> pd.DataFrame:
         if self.stimuli is None:
-            raise InvalidConstructionSequence("must call `add_stimuli` first")
+            raise InvalidConstructionSequence("add_stimuli")
         return self.stimuli
 
     def get_time_step(self) -> float:
         if self.time_step is None:
-            raise InvalidConstructionSequence("must call `bin_responses` first")
+            raise InvalidConstructionSequence("bin_responses")
         return self.time_step
 
     def get_trial_data(self) -> pd.DataFrame:
         if self.trial_data is None:
-            raise InvalidConstructionSequence("must call `load_responses` first")
+            raise InvalidConstructionSequence("load_responses")
         return self.trial_data
 
     def get_responses(self) -> pd.DataFrame:
         if self.responses is None:
-            raise InvalidConstructionSequence("must call `load_responses` first")
+            raise InvalidConstructionSequence("load_responses")
         return self.responses
 
     def get_response_matrix(self, key, flatten=True):
@@ -145,7 +142,8 @@ class _IncompleteDataset:
     def __getitem__(self, key):
         """
         get numpy arrays representing the responses and the stimuli
-        at the given pandas index range. The array dimensions are (time, neuron * lag)
+        at the given pandas index range. The array dimensions are (time, neuron * lag).
+        The dimensions of the stimulus will depend on the StimuliFormat chosen.
 
         If neurons and lags need to be in separate dimensions, use get_response_matrix with flatten=False.
         """
@@ -154,10 +152,15 @@ class _IncompleteDataset:
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
         except KeyError:
             stimuli_index = key
-        stimuli = np.concatenate(
-            self.get_stimuli().loc[stimuli_index]["spectrogram"].values
+        stimuli = self.get_stimuli_format().to_values(
+            self.get_stimuli().loc[stimuli_index]
         )
         return responses, stimuli
+
+    def get_stimuli_format(self) -> StimuliFormat:
+        if self.stimuli_format is None:
+            raise InvalidConstructionSequence("add_stimuli")
+        return self.stimuli_format
 
     def to_steps(self, time_in_seconds):
         """Converts a time in seconds to a time in steps"""
@@ -177,6 +180,7 @@ class Dataset(_IncompleteDataset):
     <!--
     >>> import asyncio
     >>> from preconstruct.sources import NeurobankSource
+    >>> from preconstruct.stimuliformats import Gammatone
     >>> responses = ['P120_1_1_c92']
     >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
     >>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
@@ -186,14 +190,13 @@ class Dataset(_IncompleteDataset):
     >>> builder.set_data_source(data_source)
     >>> builder.load_responses()
     >>> builder.bin_responses(time_step=0.005) # 5 ms
-    >>> builder.add_stimuli(
-    ...     window_scale=1,
+    >>> builder.add_stimuli(Gammatone(
+    ...     window_time=0.005,
     ...     frequency_bin_count=50,
     ...     min_frequency=500,
     ...     max_frequency=8000,
-    ...     log_transform=True,
     ...     log_transform_compress=1,
-    ... )
+    ... ))
     >>> builder.create_time_lags(tau=0.3)
 
     -->
@@ -226,12 +229,31 @@ class Dataset(_IncompleteDataset):
     """
     time_step: float
     """granularity of time"""
+    stimuli_format: StimuliFormat
+    """format of the stimuli"""
 
-    def __init__(self, stimuli, responses, trial_data, time_step):
+    def __init__(self, stimuli, responses, trial_data, time_step, stimuli_format):
         self.stimuli = stimuli
         self.responses = responses
         self.trial_data = trial_data
         self.time_step = time_step
+        self.stimuli_format = stimuli_format
+
+    # def __getitem__(self, key):
+    #     """
+    #     get numpy arrays representing the responses and the stimuli
+    #     at the given pandas index range. The array dimensions are (time, lag, neuron).
+    #     The dimensions of the stimulus will depend on the StimuliFormat chosen
+    #     """
+    #     events = self.get_responses().loc[key]
+    #     responses = np.concatenate(
+    #         [np.stack(x, axis=-1) for x in events.values.tolist()]
+    #     )
+    #     try:
+    #         stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
+    #     except KeyError:
+    #         stimuli_index = key
+    #     return responses, stimuli
 
 
 class DatasetBuilder:
@@ -275,14 +297,16 @@ class DatasetBuilder:
     def _aggregate_trials(
         trial_data: pd.DataFrame,
     ) -> Optional[Tuple[str, pd.DataFrame]]:
-        """if all trials contain the same data, return one trial
+        """combine corresponding trials across different pprox files
+
+        if all trials contain the same data, return one trial
         otherwise, raise a IncompatibleTrialError
         """
         trials = trial_data.groupby(axis=1, level=1)
         first = None
         for name, t in trials:
             t = t.droplevel(axis=1, level=1)
-            if first == None:
+            if first is None:
                 first = (name, t)
             first_name, first_df = first
             if not first_df.equals(t):
@@ -310,67 +334,14 @@ class DatasetBuilder:
         histogram, _ = np.histogram(row["events"], bin_edges)
         return histogram
 
-    def add_stimuli(
-        self,
-        window_scale=1.0,
-        frequency_bin_count=50,
-        min_frequency=500,
-        max_frequency=8000,
-        log_transform=True,
-        log_transform_compress=1,
-    ):
+    def add_stimuli(self, stimuli_format: StimuliFormat):
         """
-        Add a dataframe containing gammatone spectrograms for each
+        Add a dataframe containing formatted stimuli for each
         stimulus associated with a trial
 
-        `window_scale`: ratio of gammatone window size to time_step
-        `log_transform`: whether to take the log of the power of each
-        spectrogram. If `True`, each point on the spectrogram `x` will
-        be transformed into `log(x + log_transform_compress) - log(x)`
-        """
-        gammatone_params = {
-            "window_time": self._dataset.get_time_step() * window_scale,
-            "hop_time": self._dataset.get_time_step(),
-            "channels": frequency_bin_count,
-            "f_min": min_frequency,
-            "f_max": max_frequency,
-        }
-        if log_transform:
-            log_transform_params = {
-                "compress": log_transform_compress,
-            }
-        else:
-            log_transform_params = None
-        wav_data = self.data_source.get_stimuli()
-        spectrograms = pd.Series(
-            {
-                k: self._spectrogram(v, log_transform_params, gammatone_params)
-                for k, v in wav_data.items()
-            }
-        )
-        self._dataset.stimuli = pd.DataFrame()
-        self._dataset.stimuli["spectrogram"] = spectrograms
-        self._dataset.stimuli["stimulus.length"] = self._dataset.stimuli[
-            "spectrogram"
-        ].apply(lambda x: x.shape[0])
+        Consult documentation for `preconstruct.stimuliformats` for details.
 
-    @staticmethod
-    def _spectrogram(wav_data, log_transform_params, gammatone_params):
-        sample_rate, samples = wav_data
-        spectrogram = mem.cache(gtgram)(samples, sample_rate, **gammatone_params)
-        if log_transform_params is not None:
-            compress = log_transform_params["compress"]
-            spectrogram = np.log10(spectrogram + compress) - np.log10(compress)
-        return spectrogram.T
-
-    def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
-        """
-        `tau`: length of window (in secs) to consider in prediction
-        `basis`: an instance of a class that inherits from
-        `preconstruct.basisfunctions.Basis`, initialized with the dimension
-        of the projection
-
-        ## example
+        ###### example
         <!--
         >>> import asyncio
         >>> from preconstruct.sources import NeurobankSource
@@ -383,14 +354,43 @@ class DatasetBuilder:
         >>> builder.set_data_source(data_source)
         >>> builder.load_responses()
         >>> builder.bin_responses(time_step=0.005) # 5 ms
-        >>> builder.add_stimuli(
-        ...     window_scale=1,
+
+        -->
+        >>> from preconstruct.stimuliformats import Gammatone
+        >>> builder.add_stimuli(Gammatone(
+        ...     window_time=0.001,
         ...     frequency_bin_count=50,
         ...     min_frequency=500,
         ...     max_frequency=8000,
-        ...     log_transform=True,
-        ...     log_transform_compress=1,
-        ... )
+        ... ))
+        """
+        self._dataset.stimuli_format = stimuli_format
+        self._dataset.stimuli = stimuli_format.create_dataframe(
+            self.data_source, self._dataset.get_time_step()
+        )
+
+    def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
+        """
+        `tau`: length of window (in secs) to consider in prediction
+        `basis`: an instance of a class that inherits from
+        `preconstruct.basisfunctions.Basis`, initialized with the dimension
+        of the projection
+
+        ###### example
+        <!--
+        >>> import asyncio
+        >>> from preconstruct.sources import NeurobankSource
+        >>> from preconstruct.stimuliformats import Gammatone
+        >>> responses = ['P120_1_1_c92']
+        >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
+        >>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
+        ...         'mrel2o09', 'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
+        >>> data_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
+        >>> builder = DatasetBuilder()
+        >>> builder.set_data_source(data_source)
+        >>> builder.load_responses()
+        >>> builder.bin_responses(time_step=0.005) # 5 ms
+        >>> builder.add_stimuli(Gammatone())
 
 
         -->
@@ -462,6 +462,7 @@ class DatasetBuilder:
             dataset.get_responses(),
             dataset.get_trial_data(),
             dataset.get_time_step(),
+            dataset.get_stimuli_format(),
         )
 
 
@@ -474,21 +475,20 @@ class _EmptySource(DataSource):
 
     @staticmethod
     def _raise():
-        raise InvalidConstructionSequence(
-            "Must call DatasetBuilder.set_data_source"
-            "before using methods that use data"
-        )
+        raise InvalidConstructionSequence("DatasetBuilder.set_data_source")
 
 
 class InvalidConstructionSequence(Exception):
     """Indicates that the methods of a DatasetBuilder have been called in an invalid order"""
 
-    def __init__(self, description):
+    def __init__(self, required_method):
         super().__init__()
-        self.description = description
+        self.required_method = required_method
 
     def __str__(self) -> str:
-        return f"invalid construction sequence: {self.description}"
+        return (
+            f"invalid construction sequence: must call `{self.required_method}` first"
+        )
 
 
 class IncompatibleTrialError(Exception):
@@ -518,4 +518,16 @@ class InconsistentStimulusInterval(Exception):
         return (
             "if you want to pool trials, every stimulus presentation must have"
             " the same stimulus.interval"
+        )
+
+
+class IncompatibleStimuliFormat(Exception):
+    def __init__(self, format):
+        self.format = format
+
+    def __str__(self) -> str:
+        return (
+            f"the StimuliFormat you have picked ({self.format})"
+            " is not a subclass of `SameTimeIndexAsResponse`"
+            " so you can't call this function"
         )
