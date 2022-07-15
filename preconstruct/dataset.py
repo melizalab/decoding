@@ -100,12 +100,10 @@ from typing import List, Optional, Dict, Tuple
 import numpy as np
 import pandas as pd
 from scipy.linalg import hankel
-from gammatone.gtgram import gtgram
 
-import preconstruct
 from preconstruct.sources import DataSource
 from preconstruct.basisfunctions import Basis
-from preconstruct.stimuliformats import StimuliFormat, SameTimeIndexAsResponse
+from preconstruct.stimuliformats import StimuliFormat
 
 
 class _IncompleteDataset:
@@ -134,7 +132,6 @@ class _IncompleteDataset:
         if self.responses is None:
             raise InvalidConstructionSequence("load_responses")
         return self.responses
-
 
     def get_stimuli_format(self) -> StimuliFormat:
         if self.stimuli_format is None:
@@ -196,6 +193,7 @@ class Dataset(_IncompleteDataset):
 
     You can also manually select directly from the DataFrames.
     """
+
     responses: pd.DataFrame
     """Columns correspond to pprox files
     """
@@ -231,9 +229,10 @@ class Dataset(_IncompleteDataset):
             stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
         except KeyError:
             stimuli_index = key
-        stimuli = self.get_stimuli_format().to_values(self.get_stimuli().loc[stimuli_index])
+        stimuli = self.get_stimuli_format().to_values(
+            self.get_stimuli().loc[stimuli_index]
+        )
         return responses, stimuli
-
 
 
 class DatasetBuilder:
@@ -274,7 +273,9 @@ class DatasetBuilder:
         self._dataset.trial_data = trial_data
 
     @staticmethod
-    def _aggregate_trials(trial_data: pd.DataFrame) -> Optional[Tuple[str, pd.DataFrame]]:
+    def _aggregate_trials(
+        trial_data: pd.DataFrame,
+    ) -> Optional[Tuple[str, pd.DataFrame]]:
         """combine corresponding trials across different pprox files
 
         if all trials contain the same data, return one trial
@@ -297,9 +298,11 @@ class DatasetBuilder:
         the number of events that occurred within that time bin.
         """
         self._dataset.time_step = time_step
-        self._dataset.responses = self._dataset.get_responses().apply(lambda neuron: \
-              self._dataset.get_trial_data().join(neuron.rename("events")).apply(self._hist, axis=1)
-          )
+        self._dataset.responses = self._dataset.get_responses().apply(
+            lambda neuron: self._dataset.get_trial_data()
+            .join(neuron.rename("events"))
+            .apply(self._hist, axis=1)
+        )
 
     def _hist(self, row) -> np.ndarray:
         start, stop = row["interval"]
@@ -310,23 +313,39 @@ class DatasetBuilder:
         histogram, _ = np.histogram(row["events"], bin_edges)
         return histogram
 
-    def add_stimuli(
-        self,
-        stimuli_format: StimuliFormat
-    ):
+    def add_stimuli(self, stimuli_format: StimuliFormat):
         """
-        Add a dataframe containing gammatone spectrograms for each
+        Add a dataframe containing formatted stimuli for each
         stimulus associated with a trial
 
-        `window_scale`: ratio of gammatone window size to time_step
-        `log_transform`: whether to take the log of the power of each
-        spectrogram. If `True`, each point on the spectrogram `x` will
-        be transformed into `log(x + log_transform_compress) - log(x)`
+        Consult documentation for `preconstruct.stimuliformats` for details.
+
+        ###### example
+        <!--
+        >>> import asyncio
+        >>> from preconstruct.sources import NeurobankSource
+        >>> responses = ['P120_1_1_c92']
+        >>> url = 'https://gracula.psyc.virginia.edu/neurobank/'
+        >>> stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy',
+        ...         'mrel2o09', 'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
+        >>> data_source = asyncio.run(NeurobankSource.create(url, stimuli, responses))
+        >>> builder = DatasetBuilder()
+        >>> builder.set_data_source(data_source)
+        >>> builder.load_responses()
+        >>> builder.bin_responses(time_step=0.005) # 5 ms
+
+        -->
+        >>> from preconstruct.stimuliformats import Gammatone
+        >>> builder.add_stimuli(Gammatone(
+        ...     window_time=0.001,
+        ...     frequency_bin_count=50,
+        ...     min_frequency=500,
+        ...     max_frequency=8000,
+        ... ))
         """
         self._dataset.stimuli_format = stimuli_format
         self._dataset.stimuli = stimuli_format.create_dataframe(
-                self.data_source,
-                self._dataset.get_time_step()
+            self.data_source, self._dataset.get_time_step()
         )
 
     def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
@@ -336,7 +355,7 @@ class DatasetBuilder:
         `preconstruct.basisfunctions.Basis`, initialized with the dimension
         of the projection
 
-        ## example
+        ###### example
         <!--
         >>> import asyncio
         >>> from preconstruct.sources import NeurobankSource
@@ -359,29 +378,29 @@ class DatasetBuilder:
 
 
         """
-        if not isinstance(self._dataset.stimuli_format, SameTimeIndexAsResponse):
-            raise IncompatibleStimuliFormat(self._dataset.stimuli_format)
         self.tau = tau
         self.basis = None
         if basis is not None:
             window_length = self._dataset.to_steps(self.tau)
             self.basis = basis.get_basis(window_length)
-        self._dataset.responses = self._dataset.get_responses() \
-        .apply(lambda neuron:
-            self._dataset.get_trial_data()[["stimulus.interval", "stimulus.name"]] \
-                .join(neuron.rename("events"), on=neuron.index.name) \
-                .groupby(neuron.index.name).agg("first") \
-                .reset_index() \
-                .join(self._dataset.get_stimuli()["stimulus.length"], on='stimulus.name') \
-                .set_index(neuron.index.name) \
-                .apply(self._stagger, axis=1)
+        self._dataset.responses = self._dataset.get_responses().apply(
+            lambda neuron: self._dataset.get_trial_data()[
+                ["stimulus.interval", "stimulus.name"]
+            ]
+            .join(neuron.rename("events"), on=neuron.index.name)
+            .groupby(neuron.index.name)
+            .agg("first")
+            .reset_index()
+            .join(self._dataset.get_stimuli()["stimulus.length"], on="stimulus.name")
+            .set_index(neuron.index.name)
+            .apply(self._stagger, axis=1)
         )
 
     def _stagger(self, row):
         stim_start, _ = row["stimulus.interval"]
         start = self._dataset.to_steps(stim_start)
         window_length = self._dataset.to_steps(self.tau)
-        stop = start + row['stimulus.length']
+        stop = start + row["stimulus.length"]
         events = row["events"]
         assert len(events) >= stop - 1 + window_length
         time_lagged = hankel(
@@ -394,13 +413,19 @@ class DatasetBuilder:
     def pool_trials(self):
         """Pool spikes across trials"""
         neurons = self._dataset.get_responses().columns
-        if not self._dataset.get_trial_data() \
-            .groupby("stimulus.name")["stimulus.interval"] \
-            .apply(lambda ser: len(ser.unique()) == 1).all():
+        if (
+            not self._dataset.get_trial_data()
+            .groupby("stimulus.name")["stimulus.interval"]
+            .apply(lambda ser: len(ser.unique()) == 1)
+            .all()
+        ):
             raise InconsistentStimulusInterval
-        self._dataset.responses = self._dataset.get_responses().join(self._dataset.get_trial_data()) \
-            .groupby("stimulus.name") \
+        self._dataset.responses = (
+            self._dataset.get_responses()
+            .join(self._dataset.get_trial_data())
+            .groupby("stimulus.name")
             .agg({n: self._trim_to_shortest_and_sum for n in neurons})[neurons]
+        )
 
     @staticmethod
     def _trim_to_shortest_and_sum(ser: pd.Series) -> pd.Series:
@@ -412,11 +437,11 @@ class DatasetBuilder:
         dataset = self._dataset
         dataset.responses = dataset.get_responses().sort_index()
         return Dataset(
-                dataset.get_stimuli(),
-                dataset.get_responses(),
-                dataset.get_trial_data(),
-                dataset.get_time_step(),
-                dataset.get_stimuli_format(),
+            dataset.get_stimuli(),
+            dataset.get_responses(),
+            dataset.get_trial_data(),
+            dataset.get_time_step(),
+            dataset.get_stimuli_format(),
         )
 
 
@@ -440,7 +465,10 @@ class InvalidConstructionSequence(Exception):
         self.required_method = required_method
 
     def __str__(self) -> str:
-        return f"invalid construction sequence: must call `{self.required_method}` first"
+        return (
+            f"invalid construction sequence: must call `{self.required_method}` first"
+        )
+
 
 class IncompatibleTrialError(Exception):
     """Raised when corresponding trials from different pprox files differ
@@ -449,6 +477,7 @@ class IncompatibleTrialError(Exception):
     specific keys using the `ignore_columns` argument in
     `DatasetBuilder.load_responses`.
     """
+
     def __init__(self, trial_pair: Dict[str, pd.DataFrame]):
         super().__init__()
         self.trial_pair = trial_pair
@@ -458,16 +487,17 @@ class IncompatibleTrialError(Exception):
         return (
             f"at least two trials contained conflicting data: {a}, {b}\n"
             f"{self.trial_pair[a].compare(self.trial_pair[b])}"
-            )
+        )
+
 
 class InconsistentStimulusInterval(Exception):
-    """Raised when stimulus.interval differs between trials that are to be combined
-    """
+    """Raised when stimulus.interval differs between trials that are to be combined"""
+
     def __str__(self) -> str:
         return (
-                "if you want to pool trials, every stimulus presentation must have"
-                " the same stimulus.interval"
-               )
+            "if you want to pool trials, every stimulus presentation must have"
+            " the same stimulus.interval"
+        )
 
 
 class IncompatibleStimuliFormat(Exception):
@@ -476,7 +506,7 @@ class IncompatibleStimuliFormat(Exception):
 
     def __str__(self) -> str:
         return (
-                f"the StimuliFormat you have picked ({self.format})"
-                " is not a subclass of `SameTimeIndexAsResponse`"
-                " so you can't call this function"
-               )
+            f"the StimuliFormat you have picked ({self.format})"
+            " is not a subclass of `SameTimeIndexAsResponse`"
+            " so you can't call this function"
+        )
