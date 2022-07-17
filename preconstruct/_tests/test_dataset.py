@@ -50,13 +50,8 @@ def test_building(mem_data_source):
     assert np.array_equiv(binned, actual_binned)
 
     builder.add_stimuli(Gammatone())
-    print(builder._dataset.get_responses().columns)
-    spectrogram = builder._dataset.get_stimuli()["stimulus"].loc[stimulus["name"]]
+    spectrogram = builder._dataset.get_stimuli().loc[stimulus["name"]]
     spectrogram_length = spectrogram.shape[0]
-    stim_length = builder._dataset.get_stimuli()["stimulus.length"].loc[
-        stimulus["name"]
-    ]
-    assert spectrogram_length == stim_length
 
     tau = 0.3
     builder.create_time_lags(tau=tau)

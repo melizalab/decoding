@@ -5,12 +5,13 @@ Only concrete classes (not abstract) can be used as input to a
 `preconstruct.dataset.DatasetBuilder`
 """
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
 from scipy import signal
 from gammatone.gtgram import gtgram
+from gammatone.filters import centre_freqs
 
 from preconstruct.sources import Wav
 from preconstruct import _mem
@@ -20,22 +21,23 @@ class StimuliFormat(ABC):
     """Abstract base class for representing stimuli"""
 
     @abstractmethod
-    def format_from_wav(self, name: str, wav_data: Wav, time_step: float) -> np.ndarray:
+    def format_from_wav(
+        self, name: str, wav_data: Wav, interval: Tuple[float, float], time_step: float
+    ) -> pd.DataFrame:
         """return formatted version of WAVE data"""
 
     def to_values(self, stim_df) -> np.ndarray:
         """convert from pd.DataFrame to ndarray"""
-        return np.concatenate(stim_df["stimulus"].values)
+        return stim_df.values
 
-    def create_dataframe(self, data_source, time_step) -> pd.DataFrame:
+    def create_dataframe(self, data_source, time_step, intervals) -> pd.DataFrame:
         """build `stimuli` DataFrame"""
         wav_data = data_source.get_stimuli()
-        stimuli_df = pd.DataFrame()
-        stimuli_df["stimulus"] = pd.Series(
-            {k: self.format_from_wav(k, v, time_step) for k, v in wav_data.items()}
-        )
-        stimuli_df["stimulus.length"] = stimuli_df["stimulus"].apply(
-            lambda x: x.shape[0]
+        stimuli_df = pd.concat(
+            {
+                k: self.format_from_wav(k, v, intervals[k], time_step)
+                for k, v in wav_data.items()
+            },
         )
         return stimuli_df
 
@@ -49,7 +51,7 @@ class LogTransformable(StimuliFormat):
     def __init__(self, log_transform_compress: Optional[float] = None, **_kwargs):
         self.compress = log_transform_compress
 
-    def format_from_wav(self, *args) -> np.ndarray:
+    def format_from_wav(self, *args) -> pd.DataFrame:
         spectrogram = self._raw_format_from_wav(*args)
         if self.compress is not None:
             return np.log10(spectrogram + self.compress) - np.log10(self.compress)
@@ -57,8 +59,8 @@ class LogTransformable(StimuliFormat):
 
     @abstractmethod
     def _raw_format_from_wav(
-        self, name: str, wav_data: Wav, time_step: float
-    ) -> np.ndarray:
+        self, wav_data: Wav, interval: Tuple[float, float], time_step: float
+    ) -> pd.DataFrame:
         """format_from_wav without log_transform applied"""
 
 
@@ -69,19 +71,36 @@ class Spectrogram(LogTransformable):
     to see a list of acceptable keywords. (`x`, `fs`, and `nperseg` will be set automatically.)
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        min_frequency: Optional[int] = None,
+        max_frequency: Optional[int] = None,
+        **kwargs
+    ):
         self.kwargs = kwargs
+        self.min_frequency = min_frequency
+        self.max_frequency = max_frequency
         super().__init__(**kwargs)
 
     def _raw_format_from_wav(
-        self, _name: str, wav_data: Wav, time_step: float
-    ) -> np.ndarray:
+        self, _name: str, wav_data: Wav, interval: Tuple[float, float], time_step: float
+    ) -> pd.DataFrame:
         sample_rate, samples = wav_data
         nperseg = int(sample_rate * time_step)
-        _, _, spectrogram = signal.spectrogram(
+        f, t, spectrogram = signal.spectrogram(
             samples, sample_rate, nperseg=nperseg, **self.kwargs
         )
-        return spectrogram.T
+        start_time, _ = interval
+        spectrogram_df = pd.DataFrame(spectrogram.T, columns=f, index=t + start_time)
+        if self.min_frequency:
+            spectrogram_df = spectrogram_df[
+                spectrogram_df.columns[spectrogram_df.columns >= self.min_frequency]
+            ]
+        if self.max_frequency:
+            spectrogram_df = spectrogram_df[
+                spectrogram_df.columns[spectrogram_df.columns <= self.max_frequency]
+            ]
+        return spectrogram_df
 
 
 class Gammatone(LogTransformable):
@@ -103,8 +122,46 @@ class Gammatone(LogTransformable):
             "f_max": max_frequency,
         }
 
-    def _raw_format_from_wav(self, _name, wav_data, time_step) -> np.ndarray:
+    def _raw_format_from_wav(
+        self, _name, wav_data: Wav, interval: Tuple[float, float], time_step: float
+    ) -> pd.DataFrame:
         sample_rate, samples = wav_data
         self.params["hop_time"] = time_step
         spectrogram = _mem.cache(gtgram)(samples, sample_rate, **self.params)
-        return spectrogram.T
+        return pd.DataFrame(
+            spectrogram.T,
+            columns=centre_freqs(
+                sample_rate,
+                self.params["channels"],
+                self.params["f_min"],
+                self.params["f_max"],
+            ),
+            index=np.linspace(*interval, spectrogram.shape[1]),
+        )
+
+
+class SyllableCategorical(StimuliFormat):
+    """Each syllable gets its own identifier"""
+
+    def format_from_wav(
+        self, name: str, wav_data: Wav, interval: Tuple[float, float], time_step: float
+    ) -> pd.DataFrame:
+        """return formatted version of WAVE data"""
+        sample_rate, samples = wav_data
+        kernel = signal.gauss_spline(np.arange(-10, 10), 1)
+        power = signal.convolve(samples, kernel, mode="same")
+        start, stop = interval
+        syllable_boundaries = pd.Series(
+            [
+                start,
+                *np.linspace(start, stop, power.shape[0])[
+                    signal.find_peaks(power, height=np.median(np.abs(power)))
+                ],
+                stop,
+            ]
+        )
+        t = np.arange(*interval, time_step)
+        syllables = pd.get_dummies(
+            pd.cut(pd.Series(t, index=t), bins=syllable_boundaries)
+        ).rename(columns=lambda x: (name, x))
+        return syllables

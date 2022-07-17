@@ -7,11 +7,19 @@ def test_spectrogram(real_data_source):
     builder.set_data_source(real_data_source)
     builder.load_responses()
     builder.bin_responses()
-    builder.add_stimuli(Spectrogram(mode="complex"))
+    min_frequency = 1000
+    max_frequency = 8000
+    builder.add_stimuli(
+        Spectrogram(
+            scaling="density", min_frequency=min_frequency, max_frequency=max_frequency
+        )
+    )
     builder.create_time_lags()
     dataset = builder.get_dataset()
     X, Y = dataset[:]
     assert X.shape[0] == Y.shape[0]
+    frequency_bands = dataset.get_stimuli().columns
+    assert ((frequency_bands > min_frequency) & (frequency_bands < max_frequency)).all()
 
 
 def test_gammatone(real_data_source):

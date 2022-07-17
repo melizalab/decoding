@@ -366,7 +366,11 @@ class DatasetBuilder:
         """
         self._dataset.stimuli_format = stimuli_format
         self._dataset.stimuli = stimuli_format.create_dataframe(
-            self.data_source, self._dataset.get_time_step()
+            self.data_source,
+            self._dataset.get_time_step(),
+            self._dataset.get_trial_data()[["stimulus.name", "stimulus.interval"]]
+            .drop_duplicates()
+            .set_index("stimulus.name")["stimulus.interval"],
         )
 
     def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
@@ -412,7 +416,13 @@ class DatasetBuilder:
             .groupby(neuron.index.name)
             .agg("first")
             .reset_index()
-            .join(self._dataset.get_stimuli()["stimulus.length"], on="stimulus.name")
+            .join(
+                self._dataset.get_stimuli()
+                .groupby(level=0)
+                .apply(lambda x: x.shape[0])
+                .rename("stimulus.length"),
+                on="stimulus.name",
+            )
             .set_index(neuron.index.name)
             .apply(self._stagger, axis=1)
         )
