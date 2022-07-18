@@ -5,7 +5,7 @@ Only concrete classes (not abstract) can be used as input to a
 `preconstruct.dataset.DatasetBuilder`
 """
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple, Mapping, Callable
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ from scipy import signal
 from gammatone.gtgram import gtgram
 from gammatone.filters import centre_freqs
 
-from preconstruct.sources import Wav
+from preconstruct.sources import Wav, DataSource
 from preconstruct import _mem
 
 
@@ -30,7 +30,12 @@ class StimuliFormat(ABC):
         """convert from pd.DataFrame to ndarray"""
         return stim_df.values
 
-    def create_dataframe(self, data_source, time_step, intervals) -> pd.DataFrame:
+    def create_dataframe(
+        self,
+        data_source: DataSource,
+        time_step: float,
+        intervals: Mapping[str, Tuple[float, float]],
+    ) -> pd.DataFrame:
         """build `stimuli` DataFrame"""
         wav_data = data_source.get_stimuli()
         stimuli_df = pd.concat(
@@ -38,7 +43,7 @@ class StimuliFormat(ABC):
                 k: self.format_from_wav(k, v, intervals[k], time_step)
                 for k, v in wav_data.items()
             },
-        )
+        ).fillna(0)
         return stimuli_df
 
 
@@ -75,12 +80,13 @@ class Spectrogram(LogTransformable):
         self,
         min_frequency: Optional[int] = None,
         max_frequency: Optional[int] = None,
+        log_transform_compress: Optional[float] = None,
         **kwargs
     ):
         self.kwargs = kwargs
         self.min_frequency = min_frequency
         self.max_frequency = max_frequency
-        super().__init__(**kwargs)
+        super().__init__(log_transform_compress, **kwargs)
 
     def _raw_format_from_wav(
         self, _name: str, wav_data: Wav, interval: Tuple[float, float], time_step: float
@@ -112,9 +118,9 @@ class Gammatone(LogTransformable):
         frequency_bin_count=50,
         min_frequency=500,
         max_frequency=8000,
-        **kwargs
+        log_transform_compress: Optional[float] = None,
     ):
-        super().__init__(**kwargs)
+        super().__init__(log_transform_compress)
         self.params = {
             "window_time": window_time,
             "channels": frequency_bin_count,
@@ -143,24 +149,26 @@ class Gammatone(LogTransformable):
 class SyllableCategorical(StimuliFormat):
     """Each syllable gets its own identifier"""
 
+    def __init__(
+        self, peak_finder: Callable[[Wav, Tuple[float, float], float], Sequence[float]]
+    ) -> None:
+        super().__init__()
+        self.peak_finder = peak_finder
+
     def format_from_wav(
         self, name: str, wav_data: Wav, interval: Tuple[float, float], time_step: float
     ) -> pd.DataFrame:
         """return formatted version of WAVE data"""
-        sample_rate, samples = wav_data
-        kernel = signal.gauss_spline(np.arange(-10, 10), 1)
-        power = signal.convolve(samples, kernel, mode="same")
         start, stop = interval
+        peaks = self.peak_finder(wav_data, interval, time_step)
         syllable_boundaries = pd.Series(
             [
                 start,
-                *np.linspace(start, stop, power.shape[0])[
-                    signal.find_peaks(power, height=np.median(np.abs(power)))
-                ],
+                *peaks,
                 stop,
             ]
         )
-        t = np.arange(*interval, time_step)
+        t = np.arange(start, stop + time_step, time_step)
         syllables = pd.get_dummies(
             pd.cut(pd.Series(t, index=t), bins=syllable_boundaries)
         ).rename(columns=lambda x: (name, x))
