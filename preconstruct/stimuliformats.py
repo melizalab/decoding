@@ -34,17 +34,27 @@ class StimuliFormat(ABC):
         self,
         data_source: DataSource,
         time_step: float,
-        intervals: Mapping[str, Tuple[float, float]],
+        intervals: pd.Series,
     ) -> pd.DataFrame:
         """build `stimuli` DataFrame"""
         wav_data = data_source.get_stimuli()
-        stimuli_df = pd.concat(
+        stimuli = (
+            pd.DataFrame(wav_data, index=["sample_rate", "samples"])
+            .T.rename_axis("stimulus.name")
+            .join(intervals.rename("interval"), how="right")
+        )
+        formatted_stimuli = pd.concat(
             {
-                k: self.format_from_wav(k, v, intervals[k], time_step)
-                for k, v in wav_data.items()
-            },
+                index: self.format_from_wav(
+                    index,
+                    (data["sample_rate"], data["samples"]),
+                    data["interval"],
+                    time_step,
+                )
+                for index, data in stimuli.iterrows()
+            }
         ).fillna(0)
-        return stimuli_df
+        return formatted_stimuli
 
 
 class LogTransformable(StimuliFormat):

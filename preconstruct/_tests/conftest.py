@@ -72,16 +72,27 @@ def stimuli():
     samples = np.random.normal(0, 1000, 44100)
     return {"song_1": (sample_rate, samples)}
 
+
 @pytest.fixture
 def mem_data_source(stimtrial_pprox, stimuli):
     responses = stimtrial_pprox
     return MemorySource(responses, stimuli)
 
+
 @pytest.fixture
 async def real_data_source():
-    responses = ['P120_1_1_c92', 'P120_1_1_c89']
-    stimuli = \
-    ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09', \
-    'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x']
-    url = 'https://gracula.psyc.virginia.edu/neurobank/'
+    responses = ["P120_1_1_c92", "P120_1_1_c89"]
+    stimuli = [
+        "c95zqjxq",
+        "g29wxi4q",
+        "igmi8fxa",
+        "jkexyrd5",
+        "l1a3ltpy",
+        "mrel2o09",
+        "p1mrfhop",
+        "vekibwgj",
+        "w08e1crn",
+        "ztqee46x",
+    ]
+    url = "https://gracula.psyc.virginia.edu/neurobank/"
     return await NeurobankSource.create(url, stimuli, responses)
