@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import pandas as pd
 
 from preconstruct import DatasetBuilder
 from preconstruct.sources import NeurobankSource, MemorySource
@@ -73,7 +74,7 @@ def test_pool_trials(mem_data_source):
     builder.create_time_lags()
     neurons = builder._dataset.get_responses().columns
     builder.pool_trials()
-    assert builder._dataset.get_responses().columns == neurons
+    assert (builder._dataset.get_responses().columns == neurons).all()
     dataset = builder.get_dataset()
     X, Y = dataset[["song_1"]]
     assert len(X) == len(Y)

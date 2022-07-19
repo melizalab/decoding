@@ -68,18 +68,58 @@ it's structured.
 >>> dataset = builder.get_dataset()
 
 >>> dataset.responses.index
-Index(['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09',
-       'p1mrfhop', 'vekibwgj', 'w08e1crn', 'ztqee46x'],
-      dtype='object', name='stimulus.name')
+MultiIndex([('c95zqjxq',                1.0),
+            ('c95zqjxq', 1.0050000000000001),
+            ('c95zqjxq',               1.01),
+            ('c95zqjxq', 1.0150000000000001),
+            ('c95zqjxq',               1.02),
+            ('c95zqjxq',              1.025),
+            ('c95zqjxq',               1.03),
+            ('c95zqjxq',              1.035),
+            ('c95zqjxq',               1.04),
+            ('c95zqjxq',              1.045),
+            ...
+            ('ztqee46x',              3.095),
+            ('ztqee46x',                3.1),
+            ('ztqee46x',              3.105),
+            ('ztqee46x',               3.11),
+            ('ztqee46x',              3.115),
+            ('ztqee46x',               3.12),
+            ('ztqee46x',              3.125),
+            ('ztqee46x',               3.13),
+            ('ztqee46x', 3.1350000000000002),
+            ('ztqee46x',               3.14)],
+           names=['stimulus.name', 'time'], length=4112)
 >>> dataset.responses.columns
-Index(['P120_1_1_c92', 'P120_1_1_c89'], dtype='object')
+Index([                ('P120_1_1_c89', 0.0),
+                     ('P120_1_1_c89', 0.005),
+                      ('P120_1_1_c89', 0.01),
+                     ('P120_1_1_c89', 0.015),
+                      ('P120_1_1_c89', 0.02),
+                     ('P120_1_1_c89', 0.025),
+                      ('P120_1_1_c89', 0.03),
+                     ('P120_1_1_c89', 0.035),
+                      ('P120_1_1_c89', 0.04),
+                     ('P120_1_1_c89', 0.045),
+       ...
+                      ('P120_1_1_c92', 0.25),
+                     ('P120_1_1_c92', 0.255),
+                      ('P120_1_1_c92', 0.26),
+                     ('P120_1_1_c92', 0.265),
+                      ('P120_1_1_c92', 0.27),
+                     ('P120_1_1_c92', 0.275),
+                      ('P120_1_1_c92', 0.28),
+       ('P120_1_1_c92', 0.28500000000000003),
+                      ('P120_1_1_c92', 0.29),
+                     ('P120_1_1_c92', 0.295)],
+      dtype='object', length=120)
 
 Let's use our dataset to perform a simple neural decoding task
 
 >>> from sklearn.linear_model import Ridge
 >>> import numpy as np
 >>> training_stimuli = ['c95zqjxq', 'g29wxi4q', 'igmi8fxa', 'jkexyrd5', 'l1a3ltpy', 'mrel2o09']
->>> test_stimuli = set(dataset.responses.index).difference(training_stimuli)
+>>> test_stimuli = set(dataset.responses.index.get_level_values(level='stimulus.name')).difference(training_stimuli)
 >>> X, Y = dataset[list(training_stimuli)]
 >>> X.shape, Y.shape
 ((2476, 120), (2476, 50))
@@ -133,11 +173,7 @@ class _IncompleteDataset:
 
     def get_response_matrix(self, key, flatten=True):
         """get a response matrix for all the stimuli in key"""
-        events = self.get_responses().loc[key]
-        X = np.concatenate([np.stack(x, axis=1) for x in events.values.tolist()])
-        if flatten:
-            X = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2]))
-        return X
+        return self.get_responses().loc[key].values
 
     def __getitem__(self, key):
         """
@@ -201,14 +237,6 @@ class Dataset(_IncompleteDataset):
 
     -->
     >>> dataset = builder.get_dataset()
-    >>> dataset.responses.index
-    Int64Index([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
-                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
-                34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
-                51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
-                68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84,
-                85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
-               dtype='int64', name='index')
     >>> X, Y = dataset[20:30]
     >>> X.shape
     (4600, 60)
@@ -239,22 +267,6 @@ class Dataset(_IncompleteDataset):
         self.time_step = time_step
         self.stimuli_format = stimuli_format
 
-    # def __getitem__(self, key):
-    #     """
-    #     get numpy arrays representing the responses and the stimuli
-    #     at the given pandas index range. The array dimensions are (time, lag, neuron).
-    #     The dimensions of the stimulus will depend on the StimuliFormat chosen
-    #     """
-    #     events = self.get_responses().loc[key]
-    #     responses = np.concatenate(
-    #         [np.stack(x, axis=-1) for x in events.values.tolist()]
-    #     )
-    #     try:
-    #         stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
-    #     except KeyError:
-    #         stimuli_index = key
-    #     return responses, stimuli
-
 
 class DatasetBuilder:
     """Construct instances of the `Dataset` class using the [builder
@@ -279,13 +291,15 @@ class DatasetBuilder:
         assert len(clusters) > 0, "no clusters"
         trial_data = pd.concat(
             {
-                k: pd.json_normalize(v["pprox"]).set_index("index")
+                k: pd.json_normalize(v["pprox"])
+                .rename(columns={"index": "trial"})
+                .set_index("trial")
                 for k, v in clusters.items()
             },
             axis=1,
         )
         trial_data.columns = trial_data.columns.reorder_levels(order=[1, 0])
-        self._dataset.responses = trial_data["events"]
+        self._dataset.responses = trial_data["events"].rename_axis(columns="neuron")
         ignore_columns.append("events")
         trial_data = trial_data.drop(columns=ignore_columns, level=0)
         single_trial = self._aggregate_trials(trial_data)
@@ -323,16 +337,17 @@ class DatasetBuilder:
             lambda neuron: self._dataset.get_trial_data()
             .join(neuron.rename("events"))
             .apply(self._hist, axis=1)
+            .stack()
         )
 
-    def _hist(self, row) -> np.ndarray:
+    def _hist(self, row) -> pd.Series:
         start, stop = row["interval"]
         time_step = self._dataset.get_time_step()
         # np.arange does not include the end of the interval,
         # so we make the end one time_step later
         bin_edges = np.arange(start, stop + time_step, time_step)
         histogram, _ = np.histogram(row["events"], bin_edges)
-        return histogram
+        return pd.Series(histogram, index=bin_edges[:-1]).rename_axis("time")
 
     def add_stimuli(self, stimuli_format: StimuliFormat):
         """
@@ -408,38 +423,57 @@ class DatasetBuilder:
         if basis is not None:
             window_length = self._dataset.to_steps(self.tau)
             self.basis = basis.get_basis(window_length)
-        self._dataset.responses = self._dataset.get_responses().apply(
-            lambda neuron: self._dataset.get_trial_data()[
-                ["stimulus.interval", "stimulus.name"]
-            ]
-            .join(neuron.rename("events"), on=neuron.index.name)
-            .groupby(neuron.index.name)
-            .agg("first")
-            .reset_index()
-            .join(
-                self._dataset.get_stimuli()
-                .groupby(level=0)
-                .apply(lambda x: x.shape[0])
-                .rename("stimulus.length"),
-                on="stimulus.name",
+        # figure out if trials have been pooled and adjust accordingly
+        common_index = self._dataset.get_responses().index.names[0]
+        self._dataset.responses = (
+            self._dataset.get_responses()
+            .groupby(level=0, axis=1)
+            .apply(
+                lambda neuron: self._dataset.get_trial_data()[
+                    ["stimulus.interval", "stimulus.name"]
+                ]
+                .merge(
+                    neuron[neuron.columns[0]]
+                    .rename("events")
+                    .reset_index(level="time"),
+                    on=common_index,
+                )
+                .reset_index()
+                .join(
+                    self._dataset.get_stimuli()
+                    .groupby(level=0)
+                    .apply(lambda x: x.shape[0])
+                    .rename("stimulus.length"),
+                    on="stimulus.name",
+                )
+                .groupby(common_index)
+                .apply(self._stagger)
             )
-            .set_index(neuron.index.name)
-            .apply(self._stagger, axis=1)
         )
 
     def _stagger(self, row):
-        stim_start, _ = row["stimulus.interval"]
+        [stimulus_interval] = row["stimulus.interval"].unique()
+        stim_start, _ = stimulus_interval
         start = self._dataset.to_steps(stim_start)
         window_length = self._dataset.to_steps(self.tau)
-        stop = start + row["stimulus.length"]
+        [stimulus_length] = row["stimulus.length"].unique()
+        stop = start + stimulus_length
         events = row["events"]
         assert len(events) >= stop - 1 + window_length
         time_lagged = hankel(
             events[start:stop], events[stop - 1 : stop - 1 + window_length]
         )
+        columns = pd.Series(
+            np.arange(window_length) * self._dataset.get_time_step(), name="offset"
+        )
         if self.basis is not None:
             time_lagged = np.dot(time_lagged, self.basis)
-        return time_lagged
+            columns = None
+        return pd.DataFrame(
+            time_lagged,
+            index=pd.Series(row["time"].iloc[start:stop]),
+            columns=columns,
+        )
 
     def pool_trials(self):
         """Pool spikes across trials"""
@@ -453,15 +487,12 @@ class DatasetBuilder:
             raise InconsistentStimulusInterval
         self._dataset.responses = (
             self._dataset.get_responses()
-            .join(self._dataset.get_trial_data())
-            .groupby("stimulus.name")
-            .agg({n: self._trim_to_shortest_and_sum for n in neurons})[neurons]
+            .join(
+                self._dataset.get_trial_data()["stimulus.name"],
+            )
+            .groupby(["stimulus.name", "time"])[neurons]
+            .agg("sum")
         )
-
-    @staticmethod
-    def _trim_to_shortest_and_sum(ser: pd.Series) -> pd.Series:
-        min_length = ser.apply(len).min()
-        return ser.apply(lambda x: x[:min_length]).sum()
 
     def get_dataset(self) -> Dataset:
         """Return the fully constructed `Dataset` object"""
