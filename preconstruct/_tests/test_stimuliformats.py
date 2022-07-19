@@ -46,24 +46,13 @@ def test_syllable(real_data_source):
     builder.load_responses()
     builder.bin_responses()
 
-    def peak_finder(wav_data, interval, time_step):
-        sample_rate, samples = wav_data
-        start, stop = interval
-        # we want smaller windows than the size of time_step for identifying syllables
-        # with greater precision
-        nperseg = int(sample_rate * time_step) // 2
-        _, _, spectrogram = signal.spectrogram(samples, sample_rate, nperseg=nperseg)
-        power = np.mean(spectrogram, axis=0)
-        # syllable boundaries should be moments when the sound gets quiet for a bit
-        delta_power = power[1:] - power[:-1]
-        peaks, _ = signal.find_peaks(delta_power, height=np.mean(np.abs(delta_power)))
-        return np.linspace(start, stop, delta_power.shape[0])[peaks]
-
-    builder.add_stimuli(SyllableCategorical(peak_finder))
+    builder.add_stimuli(SyllableCategorical())
     builder.create_time_lags()
     dataset = builder.get_dataset()
     X, Y = dataset[:]
     assert X.shape[0] == Y.shape[0]
+    # print(dataset.stimuli.sum(axis=1).value_counts())
+    assert (dataset.stimuli.sum(axis=1) == 1).all()
 
 
 def test_datasource_has_diff_stimuli(stimtrial_pprox):

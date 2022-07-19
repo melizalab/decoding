@@ -159,27 +159,44 @@ class Gammatone(LogTransformable):
 class SyllableCategorical(StimuliFormat):
     """Each syllable gets its own identifier"""
 
-    def __init__(
-        self, peak_finder: Callable[[Wav, Tuple[float, float], float], Sequence[float]]
-    ) -> None:
+    def __init__(self, **kwargs) -> None:
+        """kwargs passed to scipy.signal.find_peaks"""
         super().__init__()
-        self.peak_finder = peak_finder
+        self.kwargs = kwargs
 
     def format_from_wav(
         self, name: str, wav_data: Wav, interval: Tuple[float, float], time_step: float
     ) -> pd.DataFrame:
         """return formatted version of WAVE data"""
         start, stop = interval
-        peaks = self.peak_finder(wav_data, interval, time_step)
+        peaks = self.find_syllable_boundaries(wav_data, interval, time_step)
         syllable_boundaries = pd.Series(
             [
                 start,
                 *peaks,
-                stop,
+                stop + time_step,
             ]
         )
         t = np.arange(start, stop + time_step, time_step)
         syllables = pd.get_dummies(
-            pd.cut(pd.Series(t, index=t), bins=syllable_boundaries)
+            pd.cut(pd.Series(t, index=t), bins=syllable_boundaries, include_lowest=True)
         ).rename(columns=lambda x: (name, x))
         return syllables
+
+    def find_syllable_boundaries(self, wav_data, interval, time_step):
+        sample_rate, samples = wav_data
+        start, stop = interval
+        # we want smaller windows than the size of time_step for identifying syllables
+        # with greater precision
+        nperseg = int(sample_rate * time_step) // 2
+        _, _, spectrogram = signal.spectrogram(samples, sample_rate, nperseg=nperseg)
+        power = -np.mean(np.log10(spectrogram + 1), axis=0)
+        # syllable boundaries should be moments when the sound gets quiet for a bit
+        find_peaks_kwargs = {
+            "height": np.median(power),
+            "distance": 5,
+            "prominence": np.std(power),
+        }
+        find_peaks_kwargs.update(self.kwargs)
+        peaks, _ = signal.find_peaks(power, **find_peaks_kwargs)
+        return np.linspace(start, stop, len(power))[peaks]
