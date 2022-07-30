@@ -1,7 +1,35 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "--doctest-modules"
 doctest_optionflags = "NUMBER"
+
+[tool.poetry]
+name = "preconstruct"
+version = "0.2.0"
+description = "creates a dataset that is arranged to facilitate neural decoding"
+authors = ["Jonah Weissman <jw5av@virginia.edu>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.12"
+Gammatone = {url = "https://github.com/melizalab/gammatone/archive/refs/tags/0.1.0.zip" }
+parse = "^1.19.0"
+scipy = "^1.7.2"
+numpy = "^1.21.1"
+pandas = "^1.3.1"
+joblib = "^1.1.0"
+appdirs = "^1.4.4"
+aiohttp = "^3.8.1"
+single-source = "^0.3.0"
+
+
+[tool.poetry.dev-dependencies]
+pyright = "^1.1.264"
+pytest = "^7.1.2"
+pytest-asyncio = "^0.19.0"
+scikit-learn = "^1.1.1"
+pdoc = "^12.0.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

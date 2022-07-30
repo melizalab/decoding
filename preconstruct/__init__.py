@@ -29,9 +29,13 @@ input into a neural decoding model
 from joblib import Memory
 from appdirs import user_cache_dir
 
+from pathlib import Path
+from single_source import get_version
+
+__version__ = get_version(__name__, Path(__file__).parent.parent)
+
 APP_NAME = "preconstruct"
 APP_AUTHOR = "melizalab"
-__version__ = "0.1.3"
 
 
 _cache_dir = user_cache_dir(APP_NAME, APP_AUTHOR)

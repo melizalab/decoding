@@ -6,21 +6,17 @@ response that it induces.
 
 ## Documentation
 
-To view documentation, run the following code:
-```
-pip install -r requirements-dev.txt
-pdoc preconstruct
-```
+To view documentation, visit [https://melizalab.github.io/preconstruct/preconstruct.html]
 
 ## Running tests
 Install dev dependencies:
 ```
-pip install -r requirements-dev.txt
+poetry install
 ```
 
 Run tests:
 
 ```bash
-pytest
-pyright
+poetry run pytest
+poetry run pyright
 ```

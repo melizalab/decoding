@@ -12,13 +12,16 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.9
+      - uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: 1.1.11
       - name: install dependencies
         run: |
-          python -m pip install ghp-import
-          python -m pip install -r requirements-dev.txt
+          poetry install
+          poetry run pip install ghp-import
       - name: build docs
         run: |
-          pdoc preconstruct -o docs
+          poetry run pdoc preconstruct -o docs
       - name: push docs
         run: |
-          ghp-import -nfop docs
+          poetry run ghp-import -nfop docs
