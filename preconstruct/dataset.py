@@ -333,21 +333,34 @@ class DatasetBuilder:
         the number of events that occurred within that time bin.
         """
         self._dataset.time_step = time_step
-        self._dataset.responses = self._dataset.get_responses().apply(
-            lambda neuron: self._dataset.get_trial_data()
-            .join(neuron.rename("events"))
-            .apply(self._hist, axis=1)
-            .stack()
-        )
+        spike_times = self._dataset.get_responses()
 
-    def _hist(self, row) -> pd.Series:
-        start, stop = row["interval"]
-        time_step = self._dataset.get_time_step()
-        # np.arange does not include the end of the interval,
-        # so we make the end one time_step later
-        bin_edges = np.arange(start, stop + time_step, time_step)
-        histogram, _ = np.histogram(row["events"], bin_edges)
-        return pd.Series(histogram, index=bin_edges[:-1]).rename_axis("time")
+        def cut(df):
+            start, stop = df.name
+            # np.arange does not include the end of the interval,
+            # so we make the end one time_step later
+            edges = np.arange(start, stop + time_step, time_step)
+            arr = np.block(
+                df[spike_times.columns]
+                .applymap(
+                    lambda spikes: np.histogram(spikes, bins=edges)[0].reshape(-1, 1)
+                )
+                .to_numpy()
+                .tolist()
+            )
+            return pd.DataFrame(
+                arr,
+                index=pd.MultiIndex.from_product(
+                    [df.index, edges[:-1]], names=["trial", "time"]
+                ),
+                columns=spike_times.columns,
+            )
+
+        self._dataset.responses = (
+            spike_times.join(self._dataset.get_trial_data()[["interval"]])
+            .groupby("interval", group_keys=False)
+            .apply(cut)
+        )
 
     def add_stimuli(self, stimuli_format: StimuliFormat):
         """
