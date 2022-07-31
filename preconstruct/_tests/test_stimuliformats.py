@@ -22,7 +22,7 @@ def test_spectrogram(real_data_source):
     dataset = builder.get_dataset()
     X, Y = dataset[:]
     assert X.shape[0] == Y.shape[0]
-    frequency_bands = dataset.get_stimuli().columns
+    frequency_bands = dataset._get_stimuli().columns
     assert ((frequency_bands > min_frequency) & (frequency_bands < max_frequency)).all()
 
 
@@ -52,7 +52,7 @@ def test_syllable(real_data_source):
     X, Y = dataset[:]
     assert X.shape[0] == Y.shape[0]
     # print(dataset.stimuli.sum(axis=1).value_counts())
-    assert (dataset.stimuli.sum(axis=1) == 1).all()
+    assert (dataset._get_stimuli().sum(axis=1) == 1).all()
 
 
 def test_datasource_has_diff_stimuli(stimtrial_pprox):

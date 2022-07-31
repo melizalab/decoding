@@ -144,66 +144,7 @@ from preconstruct.basisfunctions import Basis
 from preconstruct.stimuliformats import StimuliFormat
 
 
-class _IncompleteDataset:
-    responses: Optional[pd.DataFrame]
-    stimuli: Optional[pd.DataFrame]
-    trial_data: Optional[pd.DataFrame]
-    time_step: Optional[float]
-    stimuli_format: Optional[StimuliFormat]
-
-    def get_stimuli(self) -> pd.DataFrame:
-        if self.stimuli is None:
-            raise InvalidConstructionSequence("add_stimuli")
-        return self.stimuli
-
-    def get_time_step(self) -> float:
-        if self.time_step is None:
-            raise InvalidConstructionSequence("bin_responses")
-        return self.time_step
-
-    def get_trial_data(self) -> pd.DataFrame:
-        if self.trial_data is None:
-            raise InvalidConstructionSequence("load_responses")
-        return self.trial_data
-
-    def get_responses(self) -> pd.DataFrame:
-        if self.responses is None:
-            raise InvalidConstructionSequence("load_responses")
-        return self.responses
-
-    def get_response_matrix(self, key, flatten=True):
-        """get a response matrix for all the stimuli in key"""
-        return self.get_responses().loc[key].values
-
-    def __getitem__(self, key):
-        """
-        get numpy arrays representing the responses and the stimuli
-        at the given pandas index range. The array dimensions are (time, neuron * lag).
-        The dimensions of the stimulus will depend on the StimuliFormat chosen.
-
-        If neurons and lags need to be in separate dimensions, use get_response_matrix with flatten=False.
-        """
-        responses = self.get_response_matrix(key, flatten=True)
-        try:
-            stimuli_index = self.get_trial_data().loc[key]["stimulus.name"]
-        except KeyError:
-            stimuli_index = key
-        stimuli = self.get_stimuli_format().to_values(
-            self.get_stimuli().loc[stimuli_index]
-        )
-        return responses, stimuli
-
-    def get_stimuli_format(self) -> StimuliFormat:
-        if self.stimuli_format is None:
-            raise InvalidConstructionSequence("add_stimuli")
-        return self.stimuli_format
-
-    def to_steps(self, time_in_seconds):
-        """Converts a time in seconds to a time in steps"""
-        return int(time_in_seconds / self.get_time_step())
-
-
-class Dataset(_IncompleteDataset):
+class Dataset:
     """Holds constructed response matrix and stimuli
 
     [Quick guide to Pandas indexing](https://pandas.pydata.org/docs/getting_started/intro_tutorials/03_subset_data.html#min-tut-03-subset)
@@ -246,26 +187,76 @@ class Dataset(_IncompleteDataset):
     You can also manually select directly from the DataFrames.
     """
 
-    responses: pd.DataFrame
+    responses: Optional[pd.DataFrame] = None
     """Columns correspond to pprox files
     """
-    stimuli: pd.DataFrame
+    stimuli: Optional[pd.DataFrame] = None
     """"""
-    trial_data: pd.DataFrame
+    trial_data: Optional[pd.DataFrame] = None
     """Each row corresponds to a trial and each column corresponds to a key in the
     pprox
     """
-    time_step: float
+    time_step: Optional[float] = None
     """granularity of time"""
-    stimuli_format: StimuliFormat
+    stimuli_format: Optional[StimuliFormat] = None
     """format of the stimuli"""
 
-    def __init__(self, stimuli, responses, trial_data, time_step, stimuli_format):
-        self.stimuli = stimuli
-        self.responses = responses
-        self.trial_data = trial_data
-        self.time_step = time_step
-        self.stimuli_format = stimuli_format
+    def _get_stimuli(self) -> pd.DataFrame:
+        if self.stimuli is None:
+            raise InvalidConstructionSequence("add_stimuli")
+        return self.stimuli
+
+    def _get_time_step(self) -> float:
+        if self.time_step is None:
+            raise InvalidConstructionSequence("bin_responses")
+        return self.time_step
+
+    def _set_time_step(self, time_step: float):
+        if self.time_step is None:
+            self.time_step = time_step
+        else:
+            raise TimestepSetTwice()
+
+    def _get_trial_data(self) -> pd.DataFrame:
+        if self.trial_data is None:
+            raise InvalidConstructionSequence("load_responses")
+        return self.trial_data
+
+    def _get_responses(self) -> pd.DataFrame:
+        if self.responses is None:
+            raise InvalidConstructionSequence("load_responses")
+        return self.responses
+
+    def get_response_matrix(self, key, flatten=True):
+        """get a response matrix for all the stimuli in key"""
+        return self._get_responses().loc[key].values
+
+    def __getitem__(self, key):
+        """
+        get numpy arrays representing the responses and the stimuli
+        at the given pandas index range. The array dimensions are (time, neuron * lag).
+        The dimensions of the stimulus will depend on the StimuliFormat chosen.
+
+        If neurons and lags need to be in separate dimensions, use get_response_matrix with flatten=False.
+        """
+        responses = self.get_response_matrix(key, flatten=True)
+        try:
+            stimuli_index = self._get_trial_data().loc[key]["stimulus.name"]
+        except KeyError:
+            stimuli_index = key
+        stimuli = self._get_stimuli_format().to_values(
+            self._get_stimuli().loc[stimuli_index]
+        )
+        return responses, stimuli
+
+    def _get_stimuli_format(self) -> StimuliFormat:
+        if self.stimuli_format is None:
+            raise InvalidConstructionSequence("add_stimuli")
+        return self.stimuli_format
+
+    def to_steps(self, time_in_seconds):
+        """Converts a time in seconds to a time in steps"""
+        return int(time_in_seconds / self._get_time_step())
 
 
 class DatasetBuilder:
@@ -278,7 +269,7 @@ class DatasetBuilder:
     basis: Optional[np.ndarray]
 
     def __init__(self):
-        self._dataset = _IncompleteDataset()
+        self._dataset = Dataset()
         self.data_source = _EmptySource()
 
     def set_data_source(self, data_source: DataSource):
@@ -332,8 +323,8 @@ class DatasetBuilder:
         transform a point process into bins of size `time_step` containinng
         the number of events that occurred within that time bin.
         """
-        self._dataset.time_step = time_step
-        spike_times = self._dataset.get_responses()
+        self._dataset._set_time_step(time_step)
+        spike_times = self._dataset._get_responses()
 
         def cut(df):
             start, stop = df.name
@@ -357,17 +348,22 @@ class DatasetBuilder:
             )
 
         self._dataset.responses = (
-            spike_times.join(self._dataset.get_trial_data()[["interval"]])
+            spike_times.join(self._dataset._get_trial_data()[["interval"]])
             .groupby("interval", group_keys=False)
             .apply(cut)
         )
 
-    def add_stimuli(self, stimuli_format: StimuliFormat):
+    def add_stimuli(
+        self, stimuli_format: StimuliFormat, time_step: Optional[float] = None
+    ):
         """
         Add a dataframe containing formatted stimuli for each
         stimulus associated with a trial
 
         Consult documentation for `preconstruct.stimuliformats` for details.
+
+        Specify `time_step` only if not already specified in `bin_responses`, if
+        you are only building the stimuli DataFrame, for example.
 
         ###### example
         <!--
@@ -392,11 +388,13 @@ class DatasetBuilder:
         ...     max_frequency=8000,
         ... ))
         """
+        if time_step is not None:
+            self._dataset._set_time_step(time_step)
         self._dataset.stimuli_format = stimuli_format
         self._dataset.stimuli = stimuli_format.create_dataframe(
             self.data_source,
-            self._dataset.get_time_step(),
-            self._dataset.get_trial_data()[["stimulus.name", "stimulus.interval"]]
+            self._dataset._get_time_step(),
+            self._dataset._get_trial_data()[["stimulus.name", "stimulus.interval"]]
             .drop_duplicates()
             .set_index("stimulus.name")["stimulus.interval"],
         )
@@ -437,12 +435,12 @@ class DatasetBuilder:
             window_length = self._dataset.to_steps(self.tau)
             self.basis = basis.get_basis(window_length)
         # figure out if trials have been pooled and adjust accordingly
-        common_index = self._dataset.get_responses().index.names[0]
+        common_index = self._dataset._get_responses().index.names[0]
         self._dataset.responses = (
-            self._dataset.get_responses()
+            self._dataset._get_responses()
             .groupby(level=0, axis=1)
             .apply(
-                lambda neuron: self._dataset.get_trial_data()[
+                lambda neuron: self._dataset._get_trial_data()[
                     ["stimulus.interval", "stimulus.name"]
                 ]
                 .merge(
@@ -453,7 +451,7 @@ class DatasetBuilder:
                 )
                 .reset_index()
                 .join(
-                    self._dataset.get_stimuli()
+                    self._dataset._get_stimuli()
                     .groupby(level=0)
                     .apply(lambda x: x.shape[0])
                     .rename("stimulus.length"),
@@ -477,7 +475,7 @@ class DatasetBuilder:
             events[start:stop], events[stop - 1 : stop - 1 + window_length]
         )
         columns = pd.Series(
-            np.arange(window_length) * self._dataset.get_time_step(), name="offset"
+            np.arange(window_length) * self._dataset._get_time_step(), name="offset"
         )
         if self.basis is not None:
             time_lagged = np.dot(time_lagged, self.basis)
@@ -490,18 +488,18 @@ class DatasetBuilder:
 
     def pool_trials(self):
         """Pool spikes across trials"""
-        neurons = self._dataset.get_responses().columns
+        neurons = self._dataset._get_responses().columns
         if (
-            not self._dataset.get_trial_data()
+            not self._dataset._get_trial_data()
             .groupby("stimulus.name")["stimulus.interval"]
             .apply(lambda ser: len(ser.unique()) == 1)
             .all()
         ):
             raise InconsistentStimulusInterval
         self._dataset.responses = (
-            self._dataset.get_responses()
+            self._dataset._get_responses()
             .join(
-                self._dataset.get_trial_data()["stimulus.name"],
+                self._dataset._get_trial_data()["stimulus.name"],
             )
             .groupby(["stimulus.name", "time"])[neurons]
             .agg("sum")
@@ -510,14 +508,8 @@ class DatasetBuilder:
     def get_dataset(self) -> Dataset:
         """Return the fully constructed `Dataset` object"""
         dataset = self._dataset
-        dataset.responses = dataset.get_responses().sort_index()
-        return Dataset(
-            dataset.get_stimuli(),
-            dataset.get_responses(),
-            dataset.get_trial_data(),
-            dataset.get_time_step(),
-            dataset.get_stimuli_format(),
-        )
+        dataset.responses = dataset._get_responses().sort_index()
+        return self._dataset
 
 
 class _EmptySource(DataSource):
@@ -585,3 +577,8 @@ class IncompatibleStimuliFormat(Exception):
             " is not a subclass of `SameTimeIndexAsResponse`"
             " so you can't call this function"
         )
+
+
+class TimestepSetTwice(Exception):
+    def __init__(self):
+        super().__init__(self, "You can only set time_step once")
