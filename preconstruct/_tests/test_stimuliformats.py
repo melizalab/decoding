@@ -1,3 +1,4 @@
+import pytest
 from preconstruct import DatasetBuilder
 from preconstruct.sources import MemorySource
 from preconstruct.stimuliformats import *
@@ -73,3 +74,18 @@ def test_datasource_has_diff_stimuli(stimtrial_pprox):
     X, Y = dataset[:]
     assert Y.shape[1] == frequency_bin_count
     assert X.shape[0] == Y.shape[0]
+
+
+@pytest.mark.parametrize("format", [Gammatone, Spectrogram])
+def test_known_spectrogram(known_spectrogram_source, format):
+    # make sure that the frequency band with the most power is the one that
+    # is closest to 3kHz for a signal that is a sine wave oscillating at 3kHz
+    builder = DatasetBuilder()
+    builder.set_data_source(known_spectrogram_source)
+    builder.load_responses()
+    builder.add_stimuli(format(), time_step=0.005)
+    dataset = builder.get_dataset()
+    spec = dataset._get_stimuli().loc["song_1"]
+    freq_band = 3e3
+    closest_column = (spec.columns.to_series() - freq_band).abs().argmin()
+    assert spec.mean().argmax() == closest_column

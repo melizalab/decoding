@@ -96,3 +96,20 @@ async def real_data_source():
     ]
     url = "https://gracula.psyc.virginia.edu/neurobank/"
     return await NeurobankSource.create(url, stimuli, responses)
+
+
+@pytest.fixture
+def known_spectrogram():
+    fs = 10e3
+    N = 1e4
+    amp = 2 * np.sqrt(2)
+    time = np.arange(N) / float(fs)
+    freq = 3e3
+    x = amp * np.sin(2 * np.pi * freq * time)
+    return {"song_1": (fs, x)}
+
+
+@pytest.fixture
+def known_spectrogram_source(stimtrial_pprox, known_spectrogram):
+    responses = stimtrial_pprox
+    return MemorySource(responses, known_spectrogram)

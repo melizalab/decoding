@@ -146,11 +146,13 @@ class Gammatone(LogTransformable):
         spectrogram = _mem.cache(gtgram)(samples, sample_rate, **self.params)
         return pd.DataFrame(
             spectrogram.T,
-            columns=centre_freqs(
-                sample_rate,
-                self.params["channels"],
-                self.params["f_min"],
-                self.params["f_max"],
+            columns=np.flip(
+                centre_freqs(
+                    sample_rate,
+                    self.params["channels"],
+                    self.params["f_min"],
+                    self.params["f_max"],
+                )
             ),
             index=np.linspace(*interval, spectrogram.shape[1]),
         )
