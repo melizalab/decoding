@@ -227,21 +227,22 @@ class Dataset:
             raise InvalidConstructionSequence("load_responses")
         return self.responses
 
-    def get_response_matrix(self, key, flatten=True):
-        """get a response matrix for all the stimuli in key"""
-        return self._get_responses().loc[key].values
-
     def __getitem__(self, key):
         """
         get numpy arrays representing the responses and the stimuli
         at the given pandas index range. The array dimensions are (time, neuron * lag).
         The dimensions of the stimulus will depend on the StimuliFormat chosen.
-
-        If neurons and lags need to be in separate dimensions, use get_response_matrix with flatten=False.
         """
-        responses = self.get_response_matrix(key, flatten=True)
+        selection = (
+            self._get_responses()
+            .index.get_level_values(0)
+            .unique()
+            .to_series()
+            .loc[key]
+        )
+        responses = self._get_responses().loc[selection].to_numpy()
         try:
-            stimuli_index = self._get_trial_data().loc[key]["stimulus.name"]
+            stimuli_index = self._get_trial_data().loc[selection]["stimulus.name"]
         except KeyError:
             stimuli_index = key
         stimuli = self._get_stimuli_format().to_values(
@@ -351,7 +352,7 @@ class DatasetBuilder:
             spike_times.join(self._dataset._get_trial_data()[["interval"]])
             .groupby("interval", group_keys=False)
             .apply(cut)
-        )
+        ).sort_index()
 
     def add_stimuli(
         self, stimuli_format: StimuliFormat, time_step: Optional[float] = None
@@ -444,12 +445,12 @@ class DatasetBuilder:
                     ["stimulus.interval", "stimulus.name"]
                 ]
                 .merge(
-                    neuron[neuron.columns[0]]
+                    neuron[neuron.columns[0]]  # convert to series
                     .rename("events")
                     .reset_index(level="time"),
                     on=common_index,
+                    how="left",
                 )
-                .reset_index()
                 .join(
                     self._dataset._get_stimuli()
                     .groupby(level=0)
@@ -462,14 +463,15 @@ class DatasetBuilder:
             )
         )
 
-    def _stagger(self, row):
-        [stimulus_interval] = row["stimulus.interval"].unique()
+    def _stagger(self, df):
+        df = df.reset_index()
+        [stimulus_interval] = df["stimulus.interval"].unique()
         stim_start, _ = stimulus_interval
-        start = self._dataset.to_steps(stim_start)
+        start = df["time"][df["time"] >= stim_start].idxmin()
         window_length = self._dataset.to_steps(self.tau)
-        [stimulus_length] = row["stimulus.length"].unique()
+        [stimulus_length] = df["stimulus.length"].unique()
         stop = start + stimulus_length
-        events = row["events"]
+        events = df["events"]
         assert len(events) >= stop - 1 + window_length
         time_lagged = hankel(
             events[start:stop], events[stop - 1 : stop - 1 + window_length]
@@ -482,7 +484,7 @@ class DatasetBuilder:
             columns = None
         return pd.DataFrame(
             time_lagged,
-            index=pd.Series(row["time"].iloc[start:stop]),
+            index=df["time"].iloc[start:stop],
             columns=columns,
         )
 
@@ -507,8 +509,6 @@ class DatasetBuilder:
 
     def get_dataset(self) -> Dataset:
         """Return the fully constructed `Dataset` object"""
-        dataset = self._dataset
-        dataset.responses = dataset._get_responses().sort_index()
         return self._dataset
 
 

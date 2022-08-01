@@ -143,6 +143,15 @@ async def test_margot_data():
     X, Y = dataset[training_stimuli]
     print("X.shape:", X.shape)
     print("Y.shape:", Y.shape)
+    print(
+        dataset._get_responses().loc[training_stimuli[0]].index
+        - dataset._get_stimuli().loc[training_stimuli[0]].index
+    )
+    assert np.allclose(
+        dataset._get_responses().loc[training_stimuli[0]].index,
+        dataset._get_stimuli().loc[training_stimuli[0]].index,
+        atol=1e-2,
+    )
     estimator = Ridge(alpha=8.59)
     estimator.fit(X, Y)
     print("model score:", estimator.score(X, Y))
