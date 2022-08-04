@@ -5,7 +5,7 @@ doctest_optionflags = "NUMBER"
 
 [tool.poetry]
 name = "preconstruct"
-version = "0.2.0"
+version = "0.2.1"
 description = "creates a dataset that is arranged to facilitate neural decoding"
 authors = ["Jonah Weissman <jw5av@virginia.edu>"]
 license = "MIT"
