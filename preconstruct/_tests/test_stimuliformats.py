@@ -52,8 +52,12 @@ def test_syllable(real_data_source):
     dataset = builder.get_dataset()
     X, Y = dataset[:]
     assert X.shape[0] == Y.shape[0]
-    # print(dataset.stimuli.sum(axis=1).value_counts())
-    assert (dataset._get_stimuli().sum(axis=1) == 1).all()
+    trial = dataset._get_trial_data().iloc[0]
+    assert np.allclose(
+        dataset._get_responses().loc[trial.name].index,
+        dataset._get_stimuli().loc[trial['stimulus.name']].index,
+        atol=1e-6,
+    )
 
 
 def test_datasource_has_diff_stimuli(stimtrial_pprox):

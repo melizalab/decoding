@@ -180,9 +180,14 @@ class SyllableCategorical(StimuliFormat):
             ]
         )
         t = np.arange(start, stop + time_step, time_step)
-        syllables = pd.get_dummies(
-            pd.cut(pd.Series(t, index=t), bins=syllable_boundaries, include_lowest=True)
-        ).rename(columns=lambda x: (name, x))
+        syllables = (
+            pd.cut(
+                pd.Index(t).to_series(), bins=syllable_boundaries, include_lowest=True
+            )
+            .astype("object")
+            .apply(lambda x: (name, x))
+            .rename("syllable")
+        )
         return syllables
 
     def find_syllable_boundaries(self, wav_data, interval, time_step):

@@ -66,9 +66,9 @@ def test_building(mem_data_source):
     assert len(X) == len(Y)
 
 
-def test_pool_trials(mem_data_source):
+def test_pool_trials(real_data_source):
     builder = DatasetBuilder()
-    builder.set_data_source(mem_data_source)
+    builder.set_data_source(real_data_source)
     builder.load_responses()
     builder.bin_responses()
     builder.add_stimuli(Gammatone())
@@ -77,8 +77,9 @@ def test_pool_trials(mem_data_source):
     builder.pool_trials()
     assert (builder._dataset._get_responses().columns == neurons).all()
     dataset = builder.get_dataset()
-    X, Y = dataset[["song_1"]]
+    X, Y = dataset[["ztqee46x"]]
     assert len(X) == len(Y)
+    assert isinstance(dataset._get_responses().columns, pd.MultiIndex)
 
 
 def test_pool_trials_before_lag(real_data_source):

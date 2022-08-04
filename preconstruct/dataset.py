@@ -91,28 +91,28 @@ MultiIndex([('c95zqjxq',                1.0),
             ('ztqee46x',               3.14)],
            names=['stimulus.name', 'time'], length=4112)
 >>> dataset.responses.columns
-Index([                ('P120_1_1_c89', 0.0),
-                     ('P120_1_1_c89', 0.005),
-                      ('P120_1_1_c89', 0.01),
-                     ('P120_1_1_c89', 0.015),
-                      ('P120_1_1_c89', 0.02),
-                     ('P120_1_1_c89', 0.025),
-                      ('P120_1_1_c89', 0.03),
-                     ('P120_1_1_c89', 0.035),
-                      ('P120_1_1_c89', 0.04),
-                     ('P120_1_1_c89', 0.045),
-       ...
-                      ('P120_1_1_c92', 0.25),
-                     ('P120_1_1_c92', 0.255),
-                      ('P120_1_1_c92', 0.26),
-                     ('P120_1_1_c92', 0.265),
-                      ('P120_1_1_c92', 0.27),
-                     ('P120_1_1_c92', 0.275),
-                      ('P120_1_1_c92', 0.28),
-       ('P120_1_1_c92', 0.28500000000000003),
-                      ('P120_1_1_c92', 0.29),
-                     ('P120_1_1_c92', 0.295)],
-      dtype='object', length=120)
+MultiIndex([('P120_1_1_c89',                 0.0),
+            ('P120_1_1_c89',               0.005),
+            ('P120_1_1_c89',                0.01),
+            ('P120_1_1_c89',               0.015),
+            ('P120_1_1_c89',                0.02),
+            ('P120_1_1_c89',               0.025),
+            ('P120_1_1_c89',                0.03),
+            ('P120_1_1_c89',               0.035),
+            ('P120_1_1_c89',                0.04),
+            ('P120_1_1_c89',               0.045),
+            ...
+            ('P120_1_1_c92',                0.25),
+            ('P120_1_1_c92',               0.255),
+            ('P120_1_1_c92',                0.26),
+            ('P120_1_1_c92',               0.265),
+            ('P120_1_1_c92',                0.27),
+            ('P120_1_1_c92',               0.275),
+            ('P120_1_1_c92',                0.28),
+            ('P120_1_1_c92', 0.28500000000000003),
+            ('P120_1_1_c92',                0.29),
+            ('P120_1_1_c92',               0.295)],
+           names=['neuron', 'offset'], length=120)
 
 Let's use our dataset to perform a simple neural decoding task
 
@@ -498,13 +498,15 @@ class DatasetBuilder:
             .all()
         ):
             raise InconsistentStimulusInterval
-        self._dataset.responses = (
-            self._dataset._get_responses()
-            .join(
-                self._dataset._get_trial_data()["stimulus.name"],
-            )
-            .groupby(["stimulus.name", "time"])[neurons]
-            .agg("sum")
+
+        responses = self._dataset._get_responses().reset_index()
+        responses["stimulus.name"] = responses["trial"].map(
+            self._dataset._get_trial_data()["stimulus.name"]
+        )
+        del responses["trial"]
+        responses = responses.set_index(["stimulus.name", "time"]).sort_index()
+        self._dataset.responses = responses.groupby(["stimulus.name", "time"]).agg(
+            "sum"
         )
 
     def get_dataset(self) -> Dataset:
