@@ -319,10 +319,11 @@ class DatasetBuilder:
                 raise IncompatibleTrialError({first_name: first_df, name: t})
         return first
 
-    def bin_responses(self, time_step: float = 0.005):
+    def bin_responses(self, time_step: float = 0.005, normalize: bool = True):
         """
-        transform a point process into bins of size `time_step` containinng
-        the number of events that occurred within that time bin.
+        transform a point process into bins of size `time_step` containing
+        the number of events (or if `normalize` is True, the rate of events)
+        that occurred within the time bin.
         """
         self._dataset._set_time_step(time_step)
         spike_times = self._dataset._get_responses()
@@ -340,6 +341,8 @@ class DatasetBuilder:
                 .to_numpy()
                 .tolist()
             )
+            if normalize:
+                arr = arr / time_step
             return pd.DataFrame(
                 arr,
                 index=pd.MultiIndex.from_product(
