@@ -39,7 +39,7 @@ def test_building(mem_data_source):
     builder.load_responses()
 
     time_step = 0.001
-    builder.bin_responses(time_step=time_step)
+    builder.bin_responses(time_step=time_step, normalize=False)
     neuron = "neuron_1"
     trial_index = 0
     trial = mem_data_source.get_responses()[neuron]["pprox"][trial_index]
@@ -49,7 +49,7 @@ def test_building(mem_data_source):
     binned[200] = binned[1000] = binned[1500] = 1
     actual_binned = builder._dataset._get_responses()[neuron].loc[trial_index]
     assert actual_binned.shape == binned.shape
-    assert np.array_equiv(binned, actual_binned)
+    assert np.array_equiv(binned, actual_binned.to_numpy())
 
     builder.add_stimuli(Gammatone())
     spectrogram = builder._dataset._get_stimuli().loc[stimulus["name"]]

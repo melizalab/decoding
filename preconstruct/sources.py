@@ -104,11 +104,11 @@ class DataSource(ABC):
         responses = self._get_raw_responses()
         stimuli = self.get_stimuli()
         # remove trials for stimuli that are not in the list
-        stim_names = stimuli.keys()
-        for nrn_name, nrn in responses.items():
-            nrn["pprox"] = [trial for trial in nrn["pprox"] if trial["stimulus"]["name"] in stim_names]
         durations = {name: len(s) / fs for name, (fs, s) in stimuli.items()}
-        return _fix_pprox(responses, durations)
+        responses = _fix_pprox(responses, durations)
+        for nrn_name, nrn in responses.items():
+            nrn["pprox"] = [trial for trial in nrn["pprox"] if trial["stimulus"]["name"] in stimuli]
+        return responses
 
     @abstractmethod
     def get_stimuli(self) -> Dict[str, Wav]:

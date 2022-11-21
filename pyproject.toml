@@ -2,6 +2,7 @@
 asyncio_mode = "auto"
 addopts = "--doctest-modules"
 doctest_optionflags = "NUMBER"
+testpaths = [ "preconstruct/_tests" ]
 
 [tool.poetry]
 name = "preconstruct"
