@@ -55,10 +55,14 @@ def test_building(mem_data_source):
     spectrogram = builder._dataset._get_stimuli().loc[stimulus["name"]]
     spectrogram_length = spectrogram.shape[0]
 
+    resp_bins = builder._dataset.responses.loc[0].index
+    stim_bins = spectrogram.index
+    # acceptable misalignment needs to be less than 1 in a billion bins
+    assert np.abs(np.diff(resp_bins).mean() - np.diff(stim_bins).mean()) < 1e-12
+
     tau = 0.3
     builder.create_time_lags(tau=tau)
     actual_lagged = builder._dataset._get_responses()[neuron].loc[trial_index]
-    print(spectrogram)
     shape = (spectrogram_length, int(tau / time_step))
     assert actual_lagged.shape == shape
     dataset = builder.get_dataset()
