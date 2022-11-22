@@ -13,7 +13,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.12"
-Gammatone = {url = "https://github.com/melizalab/gammatone/archive/refs/tags/0.1.0.zip" }
+melizalab-gammatone = "^0.1.1"
 parse = "^1.19.0"
 scipy = "^1.7.2"
 numpy = "^1.21.1"
