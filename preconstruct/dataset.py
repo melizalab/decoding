@@ -207,15 +207,10 @@ class Dataset:
         return self.stimuli
 
     def _get_time_step(self) -> float:
-        if self.time_step is None:
-            raise InvalidConstructionSequence("bin_responses")
-        return self.time_step
-
-    def _set_time_step(self, time_step: float):
-        if self.time_step is None:
-            self.time_step = time_step
-        else:
-            raise TimestepSetTwice()
+        if self.stimuli is None:
+            raise InvalidConstructionSequence("add_stimuli")
+        first_bins = self.stimuli.index.to_frame(index=False).iloc[:2, 1]
+        return first_bins[1] - first_bins[0]
 
     def _get_trial_data(self) -> pd.DataFrame:
         if self.trial_data is None:
@@ -319,23 +314,33 @@ class DatasetBuilder:
                 raise IncompatibleTrialError({first_name: first_df, name: t})
         return first
 
-    def bin_responses(self, time_step: float = 0.005, normalize: bool = True):
+    def _extrapolate_bins(self, stim_name, interval):
+        """ Extrapolate the bins defined over a stimulus interval to the recorded interval """
+        # The assumption is that the bins are evenly spaced.
+
+    def bin_responses(self, normalize: bool = True):
         """
-        transform a point process into bins of size `time_step` containing
-        the number of events (or if `normalize` is True, the rate of events)
-        that occurred within the time bin.
+        transform a point process into bins containing the number of events (or if `normalize` 
+        is True, the rate of events) that occurred within the time bin. Time bins are set based on
+        the stimulus, so this has to be called after add_stimuli()
         """
-        self._dataset._set_time_step(time_step)
+        trials = self._dataset._get_trial_data()
         spike_times = self._dataset._get_responses()
+        stimuli = self._dataset._get_stimuli()
 
         def cut(df):
-            start, stop = df.name
-            # np.arange does not include the end of the interval,
-            # so we make the end one time_step later
-            edges = np.arange(start, stop + time_step, time_step)
+            stim_name = df["stimulus.name"]
+            interval = df["interval"]
+            stim_bins = stimuli.loc[stim_name].index.to_numpy()
+            time_step = stim_bins[1] - stim_bins[0]
+            edges = np.concatenate([
+                np.arange(stim_bins[0], interval[0] - time_step, -time_step)[:0:-1],
+                stim_bins,
+                np.arange(stim_bins[-1], interval[-1] + time_step, time_step)[1:]
+            ])
             arr = np.block(
                 df[spike_times.columns]
-                .applymap(
+                .apply(
                     lambda spikes: np.histogram(spikes, bins=edges)[0].reshape(-1, 1)
                 )
                 .to_numpy()
@@ -346,28 +351,22 @@ class DatasetBuilder:
             return pd.DataFrame(
                 arr,
                 index=pd.MultiIndex.from_product(
-                    [df.index, edges[:-1]], names=["trial", "time"]
+                    [[df.name], edges[:-1]], names=["trial", "time"]
                 ),
                 columns=spike_times.columns,
             )
-
-        self._dataset.responses = (
-            spike_times.join(self._dataset._get_trial_data()[["interval"]])
-            .groupby("interval", group_keys=False)
-            .apply(cut)
-        ).sort_index()
+        self._dataset.responses = pd.concat(
+            [cut(df) for _, df in spike_times.join(trials).iterrows()]
+        )
 
     def add_stimuli(
-        self, stimuli_format: StimuliFormat, time_step: Optional[float] = None
+        self, stimuli_format: StimuliFormat, time_step: float
     ):
         """
         Add a dataframe containing formatted stimuli for each
         stimulus associated with a trial
 
         Consult documentation for `preconstruct.stimuliformats` for details.
-
-        Specify `time_step` only if not already specified in `bin_responses`, if
-        you are only building the stimuli DataFrame, for example.
 
         ###### example
         <!--
@@ -381,7 +380,6 @@ class DatasetBuilder:
         >>> builder = DatasetBuilder()
         >>> builder.set_data_source(data_source)
         >>> builder.load_responses()
-        >>> builder.bin_responses(time_step=0.005) # 5 ms
 
         -->
         >>> from preconstruct.stimuliformats import Gammatone
@@ -390,18 +388,24 @@ class DatasetBuilder:
         ...     frequency_bin_count=50,
         ...     min_frequency=500,
         ...     max_frequency=8000,
-        ... ))
+        ... ), time_step=0.005) # 5 ms
+
         """
-        if time_step is not None:
-            self._dataset._set_time_step(time_step)
         self._dataset.stimuli_format = stimuli_format
         self._dataset.stimuli = stimuli_format.create_dataframe(
             self.data_source,
-            self._dataset._get_time_step(),
+            time_step,
             self._dataset._get_trial_data()[["stimulus.name", "stimulus.interval"]]
             .drop_duplicates()
             .set_index("stimulus.name")["stimulus.interval"],
         )
+        time_steps = (
+            self._dataset.stimuli.index.to_frame()
+            .groupby(0)
+            .apply(lambda df: df[1].diff().mean())
+        )
+        if ((time_steps - time_steps[0]).abs() > 1e-9).any():
+            raise IncompatibleStimulusSamplingRates
 
     def create_time_lags(self, tau: float = 0.300, basis: Optional[Basis] = None):
         """
@@ -493,7 +497,6 @@ class DatasetBuilder:
 
     def pool_trials(self):
         """Pool spikes across trials"""
-        neurons = self._dataset._get_responses().columns
         if (
             not self._dataset._get_trial_data()
             .groupby("stimulus.name")["stimulus.interval"]
@@ -503,6 +506,8 @@ class DatasetBuilder:
             raise InconsistentStimulusInterval
 
         responses = self._dataset._get_responses().reset_index()
+        if "time" not in responses.columns:
+            raise InvalidConstructionSequence("bin_responses")
         responses["stimulus.name"] = responses["trial"].map(
             self._dataset._get_trial_data()["stimulus.name"]
         )
@@ -569,6 +574,16 @@ class InconsistentStimulusInterval(Exception):
         return (
             "if you want to pool trials, every stimulus presentation must have"
             " the same stimulus.interval"
+        )
+
+
+class IncompatibleStimulusSamplingRates(Exception):
+    """Raised when it's not possible for all stimuli to have the desired time step"""
+
+    def __str__(self) -> str:
+        return (
+            "Stimuli have different sampling rates, and it's not possible for"
+            " them to all have the same time step"
         )
 
 

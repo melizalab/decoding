@@ -10,8 +10,6 @@ from typing import Optional, Sequence, Tuple, Mapping, Callable
 import numpy as np
 import pandas as pd
 from scipy import signal
-from gammatone.gtgram import gtgram
-from gammatone.filters import centre_freqs
 
 from preconstruct.sources import Wav, DataSource
 from preconstruct import _mem
@@ -141,9 +139,15 @@ class Gammatone(LogTransformable):
     def _raw_format_from_wav(
         self, _name, wav_data: Wav, interval: Tuple[float, float], time_step: float
     ) -> pd.DataFrame:
+        from gammatone.gtgram import gtgram, gtgram_strides
+        from gammatone.filters import centre_freqs
         sample_rate, samples = wav_data
         self.params["hop_time"] = time_step
         spectrogram = _mem.cache(gtgram)(samples, sample_rate, **self.params)
+        _, nframes = spectrogram.shape
+        _, hop_samples, _ = gtgram_strides(sample_rate, self.params["window_time"], self.params["hop_time"], samples.size)
+        hop_time = hop_samples / sample_rate
+        index=np.arange(*interval, hop_time)[:nframes]
         return pd.DataFrame(
             spectrogram.T,
             columns=np.flip(
@@ -154,7 +158,7 @@ class Gammatone(LogTransformable):
                     self.params["f_max"],
                 )
             ),
-            index=np.linspace(*interval, spectrogram.shape[1]),
+            index=index
         )
 
 

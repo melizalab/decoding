@@ -5,8 +5,7 @@ import pandas as pd
 from preconstruct import DatasetBuilder
 from preconstruct.sources import NeurobankSource, MemorySource
 from preconstruct.stimuliformats import Gammatone
-from preconstruct.dataset import *
-
+from preconstruct.dataset import InvalidConstructionSequence, TimestepSetTwice
 
 @pytest.fixture
 def mem_data_source(stimtrial_pprox, stimuli):
@@ -34,31 +33,28 @@ async def real_data_source():
 
 
 def test_building(mem_data_source):
+    time_step = 0.001
     builder = DatasetBuilder()
     builder.set_data_source(mem_data_source)
     builder.load_responses()
-
-    time_step = 0.001
-    builder.bin_responses(time_step=time_step, normalize=False)
     neuron = "neuron_1"
     trial_index = 0
     trial = mem_data_source.get_responses()[neuron]["pprox"][trial_index]
-    stimulus = trial["stimulus"]
-    recording_duration = (trial["interval"][1] - trial["interval"][0]) / time_step
-    binned = np.zeros(int(recording_duration))
-    binned[200] = binned[1000] = binned[1500] = 1
-    actual_binned = builder._dataset._get_responses()[neuron].loc[trial_index]
-    assert actual_binned.shape == binned.shape
-    assert np.array_equiv(binned, actual_binned.to_numpy())
+    stimulus = trial["stimulus"]["name"]
 
-    builder.add_stimuli(Gammatone())
-    spectrogram = builder._dataset._get_stimuli().loc[stimulus["name"]]
+    builder.add_stimuli(Gammatone(), time_step=time_step)
+    spectrogram = builder._dataset._get_stimuli().loc[stimulus]
     spectrogram_length = spectrogram.shape[0]
 
-    resp_bins = builder._dataset.responses.loc[0].index
+    builder.bin_responses(normalize=False)
+    binned = builder._dataset._get_responses()[neuron].loc[trial_index]
+    bin_times = binned[binned > 0].index.to_numpy()
+    np.testing.assert_array_almost_equal(bin_times, trial["events"], decimal=3)
+
+    # check for misalignment of stimulus and response bins:
+    resp_bins = binned.index
     stim_bins = spectrogram.index
-    # acceptable misalignment needs to be less than 1 in a billion bins
-    assert np.abs(np.diff(resp_bins).mean() - np.diff(stim_bins).mean()) < 1e-12
+    assert np.diff(resp_bins).mean() == pytest.approx(np.diff(stim_bins).mean())
 
     tau = 0.3
     builder.create_time_lags(tau=tau)
@@ -70,15 +66,35 @@ def test_building(mem_data_source):
     assert len(X) == len(Y)
 
 
+def test_pool_before_binning(mem_data_source):
+    builder = DatasetBuilder()
+    builder.set_data_source(mem_data_source)
+    builder.load_responses()
+    with pytest.raises(InvalidConstructionSequence):
+        builder.pool_trials()
+
+
 def test_pool_trials(real_data_source):
     builder = DatasetBuilder()
     builder.set_data_source(real_data_source)
     builder.load_responses()
+    builder.add_stimuli(Gammatone(), time_step=0.005)
     builder.bin_responses()
-    builder.add_stimuli(Gammatone())
+    builder.pool_trials()
+
+    trial_index = 0
+    neuron = real_data_source.cluster_list[0]
+    trial = real_data_source.get_responses()[neuron]["pprox"][trial_index]
+    stimulus = trial["stimulus"]["name"]
+    binned = builder._dataset._get_responses()[neuron].loc[stimulus]
+    spectrogram = builder._dataset._get_stimuli().loc[stimulus]
+    assert (
+        np.diff(binned.index).mean() ==
+        pytest.approx(np.diff(spectrogram.index).mean())
+    )
+
     builder.create_time_lags()
     neurons = builder._dataset._get_responses().columns
-    builder.pool_trials()
     assert (builder._dataset._get_responses().columns == neurons).all()
     dataset = builder.get_dataset()
     X, Y = dataset[["ztqee46x"]]
@@ -90,8 +106,8 @@ def test_pool_trials_before_lag(real_data_source):
     builder = DatasetBuilder()
     builder.set_data_source(real_data_source)
     builder.load_responses()
+    builder.add_stimuli(Gammatone(), time_step=0.005)
     builder.bin_responses()
-    builder.add_stimuli(Gammatone())
     builder.pool_trials()
     builder.create_time_lags()
     dataset_pool_first = builder.get_dataset()
@@ -99,8 +115,8 @@ def test_pool_trials_before_lag(real_data_source):
     builder = DatasetBuilder()
     builder.set_data_source(real_data_source)
     builder.load_responses()
+    builder.add_stimuli(Gammatone(), time_step=0.005)
     builder.bin_responses()
-    builder.add_stimuli(Gammatone())
     builder.create_time_lags()
     builder.pool_trials()
     dataset_pool_second = builder.get_dataset()
@@ -112,68 +128,33 @@ def test_pool_trials_before_lag(real_data_source):
     )
 
 
-async def test_margot_data():
-    from preconstruct import sources, dataset, basisfunctions
-    from sklearn.linear_model import RidgeCV, Ridge
-
-    responses = ["P4_p1r2_ch20_c31", "O129_p1r2_ch19_c3", "P4_p1r2_ch22_c23"]
-    stimuli = []
-    url = "https://gracula.psyc.virginia.edu/neurobank/"
-    test_source = await (sources.NeurobankSource.create(url, stimuli, responses))
-    stimuli = list(test_source.stimuli_names_from_pprox())
-    data_source = await (sources.NeurobankSource.create(url, stimuli, responses))
-    builder = dataset.DatasetBuilder()
-    builder.set_data_source(data_source)
-    print("loading responses")
-    builder.load_responses(ignore_columns=["category"])
-    print("binning responses")
-    builder.bin_responses(time_step=0.001)  # 5 ms
-    print("computing spectrograms")
-    builder.add_stimuli(
-        Gammatone(
-            window_time=0.0025,
-            frequency_bin_count=30,
-            min_frequency=500,
-            max_frequency=8000,
-            log_transform_compress=1,
-        )
-    )
-    basis = basisfunctions.RaisedCosineBasis(30, linearity_factor=30)
-    print("creating design matrices")
-    builder.pool_trials()
-    builder.create_time_lags(tau=0.3, basis=basis)
+def test_datasource_has_diff_stimuli(stimtrial_pprox):
+    frequency_bin_count = 50
+    sample_rate = 44100
+    samples = np.random.normal(0, 1000, 44100)
+    # note that the stimuli dict contains a strict superset of the stimuli referenced
+    # in the responses dict. That's the point of this test
+    stimuli = {"song_1": (sample_rate, samples), "song_2": (sample_rate, samples)}
+    responses = stimtrial_pprox
+    builder = DatasetBuilder()
+    builder.set_data_source(MemorySource(responses, stimuli))
+    builder.load_responses()
+    builder.add_stimuli(Gammatone(frequency_bin_count=frequency_bin_count), time_step=0.005)
+    builder.bin_responses()
+    builder.create_time_lags()
     dataset = builder.get_dataset()
-    training_stimuli = stimuli
-    print(builder._dataset._get_responses())
-    X, Y = dataset[training_stimuli]
-    print("X.shape:", X.shape)
-    print("Y.shape:", Y.shape)
-    print(
-        dataset._get_responses().loc[training_stimuli[0]].index
-        - dataset._get_stimuli().loc[training_stimuli[0]].index
-    )
-    assert np.allclose(
-        dataset._get_responses().loc[training_stimuli[0]].index,
-        dataset._get_stimuli().loc[training_stimuli[0]].index,
-        atol=1e-2,
-    )
-    estimator = Ridge(alpha=8.59)
-    estimator.fit(X, Y)
-    print("model score:", estimator.score(X, Y))
-
+    X, Y = dataset[:]
+    assert Y.shape[1] == frequency_bin_count
+    assert X.shape[0] == Y.shape[0]
 
 def test_stimuli_only(real_data_source):
     builder = DatasetBuilder()
     builder.set_data_source(real_data_source)
     builder.load_responses()
     frequency_bin_count = 50
-    with pytest.raises(InvalidConstructionSequence, match="bin_responses"):
-        builder.add_stimuli(Gammatone(frequency_bin_count=frequency_bin_count))
     builder.add_stimuli(
         Gammatone(frequency_bin_count=frequency_bin_count), time_step=0.05
     )
-    with pytest.raises(TimestepSetTwice):
-        builder.bin_responses(0.05)
     dataset = builder.get_dataset()
     Y = dataset._get_stimuli()
     assert Y.shape[1] == frequency_bin_count
