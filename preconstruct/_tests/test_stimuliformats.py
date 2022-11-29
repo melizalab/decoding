@@ -23,8 +23,8 @@ def test_spectrogram(real_data_source):
     )
     dataset = builder.get_dataset()
     frequency_bands = dataset.stimuli.columns
-    assert (frequency_bands >= min_frequency).all()
-    assert (frequency_bands <= max_frequency).all()
+    assert frequency_bands[0] - min_frequency > -1e-9
+    assert max_frequency - frequency_bands[-1] > -1e-9
 
 
 def test_gammatone(real_data_source):
@@ -45,8 +45,8 @@ def test_gammatone(real_data_source):
     )
     dataset = builder.get_dataset()
     frequency_bands = dataset.stimuli.columns
-    assert (frequency_bands >= min_frequency).all()
-    assert (frequency_bands <= max_frequency).all()
+    assert frequency_bands[0] - min_frequency > -1e-9
+    assert max_frequency - frequency_bands[-1] > -1e-9
 
 
 def test_syllable(real_data_source):
