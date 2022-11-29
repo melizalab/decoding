@@ -35,14 +35,13 @@ Now we can start building our dataset. We will put our data into a
 >>> builder.set_data_source(data_source)
 >>> builder.load_responses()
 
-The first choice we have to make is the size of our time steps. This will
-determine the granularity of the time axis for both the spikes and the stimuli.
-The unit for this argument and all other time values will be seconds.
->>> builder.bin_responses(time_step=0.005) # 5 ms
-
-Next, we load the stimuli. We must choose parameters to control how the gammatone
-spectrograms are generated. Consult DatasetBuilder.add_stimuli for details on each
-argument.
+The first choice we have to make is how to represent the stimulus. Auditory
+stimuli are converted to spectrograms with one or more frequency channels. An
+important choice is the size of the time step, as this determines the
+granularity of the time axis for both the spikes and the stimuli. The unit for
+this argument and all other time values will be seconds. Note that due to the
+discrete sampling rate of the stimulus, the actual time step may be slightly
+larger or smaller than requested.
 >>> from preconstruct.stimuliformats import Gammatone
 >>> builder.add_stimuli(
 ...     Gammatone(
@@ -51,8 +50,12 @@ argument.
 ...         min_frequency=500,
 ...         max_frequency=8000,
 ...         log_transform_compress=1,
-...     )
+...     ),
+...     time_step=0.005,       # 5 ms
 ... )
+
+Once the time resolution is set by the stimulus, the spike times can be binned:
+>>> builder.bin_responses()
 
 Now we will convert the binned spikes into a lagged matrix, with a with a window
 of size tau.
@@ -166,14 +169,14 @@ class Dataset:
     >>> builder = DatasetBuilder()
     >>> builder.set_data_source(data_source)
     >>> builder.load_responses()
-    >>> builder.bin_responses(time_step=0.005) # 5 ms
     >>> builder.add_stimuli(Gammatone(
     ...     window_time=0.005,
     ...     frequency_bin_count=50,
     ...     min_frequency=500,
     ...     max_frequency=8000,
     ...     log_transform_compress=1,
-    ... ))
+    ... ), time_step=0.005)
+    >>> builder.bin_responses()
     >>> builder.create_time_lags(tau=0.3)
 
     -->
