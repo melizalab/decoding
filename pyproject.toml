@@ -11,7 +11,7 @@ include = ["preconstruct"]
 name = "preconstruct"
 version = "0.3.0"
 description = "preprocess auditory neurosciencd data to facilitate neural encoding/decoding models"
-authors = ["Dan Meliza <cdm8j@virginia.edu", "Jonah Weissman <jw5av@virginia.edu>"]
+authors = ["Dan Meliza <cdm8j@virginia.edu>", "Jonah Weissman <jw5av@virginia.edu>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
