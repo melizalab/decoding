@@ -9,9 +9,9 @@ include = ["preconstruct"]
 
 [tool.poetry]
 name = "preconstruct"
-version = "0.2.3"
-description = "creates a dataset that is arranged to facilitate neural decoding"
-authors = ["Jonah Weissman <jw5av@virginia.edu>"]
+version = "0.3.0"
+description = "preprocess auditory neurosciencd data to facilitate neural encoding/decoding models"
+authors = ["Dan Meliza <cdm8j@virginia.edu", "Jonah Weissman <jw5av@virginia.edu>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
