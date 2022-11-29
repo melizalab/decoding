@@ -22,7 +22,7 @@ def test_spectrogram(real_data_source):
         time_step=0.005
     )
     dataset = builder.get_dataset()
-    frequency_bands = dataset.stimuli.columns
+    frequency_bands = dataset._get_stimuli().columns
     assert frequency_bands[0] - min_frequency > -1e-9
     assert max_frequency - frequency_bands[-1] > -1e-9
 
@@ -44,7 +44,7 @@ def test_gammatone(real_data_source):
         time_step=time_step
     )
     dataset = builder.get_dataset()
-    frequency_bands = dataset.stimuli.columns
+    frequency_bands = dataset._get_stimuli().columns
     assert frequency_bands[0] - min_frequency > -1e-9
     assert max_frequency - frequency_bands[-1] > -1e-9
 

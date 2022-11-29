@@ -4,6 +4,9 @@ addopts = "--doctest-modules"
 doctest_optionflags = "NUMBER"
 testpaths = [ "preconstruct/_tests" ]
 
+[tool.pyright]
+include = ["preconstruct"]
+
 [tool.poetry]
 name = "preconstruct"
 version = "0.2.3"
